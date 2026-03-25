@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "rebalancify",
+  "project_id": "b8bd0697-bb57-4277-8829-bebffe5b9991"
+}
