@@ -1,0 +1,182 @@
+Rebalancify — Features & Product Requirements
+Version 1.3 | March 2026
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 1: PORTFOLIO TRACKING & REBALANCING ENGINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: The core calculation engine. Accepts manually entered quantities or API-fetched holdings and computes deterministic buy/sell orders to bring each platform silo to user-defined target weights. All execution requires explicit user approval before any order is placed.
+
+F1-R1: Support manual input of holdings quantities and cash balances for non-API platforms (e.g., DIME). The user enters quantities only — current prices are fetched automatically and never entered manually by the user.
+
+F1-R2: API integration with Alpaca for both paper trading and live trading accounts. This integration supports automated fetching of current holdings and cash balances, and submission of buy/sell orders strictly upon explicit user approval via a non-dismissible confirmation dialog. This is the only platform that supports automated order execution in v1.0.
+
+F1-R3: Price fetching is automatic for all asset types:
+  - Alpaca silos: prices pulled directly from the Alpaca API at sync time.
+  - BITKUB silos: prices fetched from the BITKUB public REST API.
+  - Manual silos (stocks/ETFs): prices fetched from Finnhub using the confirmed canonical ticker. Cached globally for 15 minutes; manual refresh always bypasses the cache.
+  - Manual silos (crypto): prices fetched from CoinGecko. Same cache policy applies.
+
+F1-R4: Asset search and ticker confirmation: when a user adds an asset to a manual silo, the app queries Finnhub (for stocks/ETFs) or CoinGecko (for crypto) and presents a ranked list of matching results. The user selects and confirms the correct match. This confirmed mapping is stored permanently — the user never repeats this confirmation for the same asset in the same silo.
+
+F1-R5: The rebalancing calculator operates in sell-to-buy mode. The user may optionally inject cash into the rebalancing calculation by:
+  - Entering a cash amount they wish to deploy.
+  - Toggling a "Include cash in rebalancing" switch per session.
+  When cash is included, the engine treats the entered amount as additional deployable capital on top of sell proceeds.
+  When target weights sum to less than 100%, the system displays a persistent warning: "Your targets sum to X%. The remaining Y% will be held as cash after rebalancing." The user may save and proceed.
+
+F1-R6: The calculator must offer two rounding modes, selectable by the user at the start of each rebalancing session:
+  - Partial Rebalance (default): Buy orders round down — never overspend available cash. Sell orders round up. Results in minor residual drift of approximately ±1–2%. One transaction per asset.
+  - Full Rebalance: Sells all relevant positions and re-buys to achieve exact target weights (±0.01% tolerance). Generates up to two transactions per asset. Displays a persistent warning: "This mode may generate additional transactions and higher brokerage fees."
+
+F1-R7: Before presenting any order set to the user, the engine performs a pre-flight balance validation: available cash must cover all buy orders; available share quantity must cover all sell orders. If validation fails, the engine surfaces the specific constraint to the user and halts without submitting any orders.
+
+F1-R8: Calculator accuracy target: in Full Rebalance mode, computed weights after execution must be within ±0.01% of user-defined target weights. In Partial Rebalance mode, residual drift up to ±2% is acceptable and expected.
+
+F1-R9: All rebalancing calculations and order executions are strictly isolated to their respective platform silo. No cross-silo calculations, capital transfers, or order submissions are permitted.
+
+F1-R10: Rebalancing sessions are stored as immutable session blocks. Each block captures a full snapshot of holdings, prices, and weights at the time of calculation. Sessions are never modified after creation — any new rebalance creates a new session block. This ensures historical records remain self-consistent even when the user makes trades outside the app.
+
+Non-Functional Requirements:
+  - Rebalancing calculation must complete in under 2 seconds for portfolios of up to 50 holdings.
+  - The confirmation dialog before order submission must require an affirmative button press and must not be dismissible by clicking outside.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 2: PLATFORM-SPECIFIC ACCOUNT SILOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: Users create isolated portfolio containers that map 1:1 to their real investment platforms. Capital cannot flow between silos. Each silo has its own currency, holdings, and target weights. A global overview aggregates all silos with an optional USD display toggle.
+
+F2-R1: Users may create up to 5 active platform silos per account. Each silo is named by the user and maps to exactly one real-world investment platform.
+
+F2-R2: Each silo has an independently configurable base currency set at creation time (e.g., USD for Alpaca, THB for BITKUB and DIME).
+
+F2-R3: Rebalancing calculations and API order executions are strictly isolated within their silo. The engine must never perform calculations that reference holdings, cash, or weights from a different silo.
+
+F2-R4: The global portfolio overview displays an aggregated view across all silos. If the same asset ticker exists in more than one silo, it appears as a combined position in the overview. However, for all rebalancing operations it remains an independent position within each respective silo.
+
+F2-R5: The global overview provides a "Convert all to USD" toggle (default: off). When enabled, all silo values are converted to USD for display purposes using live rates from ExchangeRate-API. When disabled, each silo displays in its own base currency. This toggle affects display only — rebalancing calculations always use each silo's own base currency.
+
+F2-R6: A Portfolio Drift Indicator monitors each asset within each silo independently. An alert is triggered when an asset's current weight deviates from its target weight by more than the user-configured threshold (default: 5%). Drift alerts are delivered via a daily digest email (via Resend) and/or in-app notification on next login — user-configurable in Settings.
+
+F2-R7: Supported platform silos and their capabilities by version:
+
+  ALPACA (US Stocks/ETFs — Global)
+    v1.0: Automated holdings fetch + automated order execution (user-approved)
+    Auth: OAuth 2.0 (API Key + Secret)
+
+  BITKUB (Crypto Exchange — Thailand)
+    v1.0: Automated holdings fetch only
+    v2.0: Automated order execution added
+    Auth: HMAC-SHA256 (API Key + Secret)
+
+  INNOVESTX (Thai Equities + Digital Assets — Thailand)
+    v1.0: Automated holdings fetch only (via Settrade Open API + proprietary Digital Asset API)
+    v2.0: Automated order execution added
+    Auth: OAuth (Settrade) + HMAC-SHA256 (Digital Assets)
+
+  CHARLES SCHWAB (US Stocks/ETFs — US)
+    v1.0: Automated holdings fetch only
+    v2.0: Automated order execution added
+    Auth: OAuth 2.0 (7-day token expiry — periodic re-authentication required)
+
+  WEBULL (US/Global Stocks — US/Thailand)
+    v1.0: Automated holdings fetch only (requires minimum $500 account value for API)
+    v2.0: Automated order execution added
+    Auth: OAuth 2.0 (API Key + Secret)
+
+  DIME (Thai + US Stocks, Mutual Funds — Thailand)
+    All versions: Manual silo only — no public API exists
+    Users enter quantities manually; prices fetched automatically via Finnhub
+
+  ALL OTHER PLATFORMS
+    Manual silo only — users enter quantities; prices fetched via Finnhub or CoinGecko
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 3: AI-POWERED QUALITATIVE RESEARCH HUB ("THE TRUST ENGINE") — V2.0 POST-MVP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: A multi-agent LLM system that surfaces qualitative insights about a specific asset by aggregating recent news, expert sentiment, and principles from an uploaded financial literature knowledge base (RAG). Strictly a decision-support tool — never recommends target weights. Requires a user-supplied LLM API key, with multiple free-tier options available.
+
+F3-R1: Research sessions may be triggered in two ways: (a) a user manually searches for any ticker symbol from the Discover page or Research Hub; (b) a user selects an asset directly from their existing portfolio holdings within a silo.
+
+F3-R2: The RAG knowledge base ships with a curated default set of financial literature summaries in Markdown format, stored in a /knowledge directory. Users may upload additional documents to extend their personal knowledge base. Uploaded documents are chunked, embedded using the user's LLM provider, and stored in Supabase with vector similarity search.
+
+F3-R3: The feature requires the user to supply a valid LLM API key in Settings. The following providers are supported, including options available at zero cost:
+
+  Free-tier options (no payment required):
+    - Google AI Studio key → Gemini 2.0 Flash (free tier)
+    - Groq key → Llama 3.3 70B (free tier)
+    - DeepSeek key → DeepSeek-V3 (free tier with usage limits)
+
+  Paid options:
+    - OpenAI key → GPT-4o Mini and other models
+    - Anthropic key → Claude 3.5 Haiku and other models
+    - OpenRouter key → 400+ models from all providers via one key (pay-per-token)
+
+  If no API key is configured, all AI-dependent features display the prompt:
+  "To use the Research Hub, add your LLM API key in Settings." The feature is fully disabled until a key is provided.
+
+F3-R4: Output is rendered as structured cards with expandable detail text. Each research card must include:
+  (a) Sentiment Score — bullish / neutral / bearish with a confidence indicator
+  (b) Key Risk Factors — a bulleted list of identified risks
+  (c) Narrative Summary — a 150–300 word aggregated analysis grounded in retrieved knowledge and recent news
+
+F3-R5: The AI system must never output a specific percentage allocation recommendation (e.g., "Set AAPL weight to 25%"). This restriction is enforced at the system prompt level and cannot be overridden by user input.
+
+F3-R6: All AI output surfaces must display the following persistent disclaimer:
+  "This platform provides data aggregation and decision-support only. Nothing on this page constitutes financial advice. Consult a licensed financial advisor before making investment decisions."
+
+F3-R7: Research sessions are cached per user in Supabase after initial generation. Users may retrieve a cached session without re-invoking the LLM API. Cache invalidation occurs only when the user explicitly requests a refresh.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 4: CONTEXTUAL NEWS FEED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: A two-tab news surface (Portfolio News and Macro News) sourced from Finnhub and FMP. All refreshes are user-triggered. Articles are cached globally with a per-user read/dismiss state layer. Graceful degradation when rate limits are reached.
+
+F4-R1: News data sourced from Finnhub and Financial Modeling Prep (FMP) free-tier API endpoints. The application must function within the rate limits of both free tiers without requiring paid upgrades.
+
+F4-R2: The news UI is divided into two distinct tabs:
+  - Portfolio News: articles filtered and ranked by relevance to the user's current holdings across all silos.
+  - Macro News: general market and macroeconomic news not filtered by holdings.
+
+F4-R3: Portfolio News filtering uses a two-tier matching algorithm:
+  - Tier 1: exact match on ticker symbol and full company name.
+  - Tier 2: enriched tag matching using company profile data fetched from Finnhub's company profile endpoint (sector, related terms, key personnel). Both tiers run on every refresh.
+
+F4-R4: News articles are cached globally in a shared cache (one record per article, shared across all users) with a 15-minute TTL. Each user's read and dismissed state is stored separately and linked to the global cache records. This architecture minimises API quota usage while preserving per-user personalisation.
+
+F4-R5: News refresh is exclusively user-triggered. A "New stories available — Refresh" button is displayed when a refresh is available. Background auto-refresh is not permitted. Refresh operations must run asynchronously and must not degrade or block other UI elements on the same page.
+
+F4-R6: News feed response time (from user triggering refresh to articles rendered) must be under 3 seconds under normal network conditions.
+
+F4-R7: When a rate limit is reached on either Finnhub or FMP, the feed must: display the most recently cached articles; show a visible notice — "Rate limit reached — showing articles last updated [timestamp]"; and display a direct link to the source for the user to read the original content.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 5: ASSET DISCOVERY & MONITORING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: Three discovery surfaces — Related Assets per ticker, Top Gainers/Losers dashboard (US Stocks + Crypto), and Portfolio Drift Indicator. Related assets use Finnhub peer data by default. An AI Insight tag is added to each peer card in v2.0 when an LLM API key is configured.
+
+F5-R1: For any asset in the user's portfolio or searched via the Discover page, display 5–8 related assets based on sector overlap and supply-chain correlation. The default discovery engine uses Finnhub's /stock/peers endpoint. A static sector taxonomy file bundled with the application serves as the offline fallback when Finnhub is unavailable.
+
+F5-R2: Each related asset is displayed as a card containing: ticker symbol, full company name, and current price (from price cache). If the user has configured a valid LLM API key (v2.0), an additional "AI Insight" field is shown — a single-line tag of maximum 12 words explaining the relationship context (e.g., "Key NAND flash supplier to Apple iPhone supply chain").
+
+F5-R3: A Top Gainers / Top Losers dashboard provides daily market overview, divided into two independent sections:
+  - US Stocks — sourced from Finnhub or FMP free-tier endpoints.
+  - Crypto — sourced from CoinGecko free tier (no API key required).
+  - Other national exchanges (e.g., SET, LSE) are not supported in v1.0.
+
+F5-R4: The Portfolio Drift Indicator displays, for each asset in each silo, the current weight versus target weight with a three-state visual indicator:
+  - Green: within threshold (acceptable drift)
+  - Yellow: within 2% of the threshold value (approaching limit)
+  - Red: threshold exceeded (action recommended)
+  The drift threshold is user-configurable per silo (default: 5%). Drift is a current-snapshot calculation only — no historical drift data is stored.
+
+F5-R5: When any asset's drift exceeds its configured threshold, a daily digest alert is generated. The user configures their preferred delivery channel in Settings: in-app notification on next login, email notification via Resend, or both.

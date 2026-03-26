@@ -1,0 +1,57 @@
+# .github/workflows/ci.yml
+# Runs on every push and every pull request to main.
+# All checks must pass before Vercel deploys.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Type-check, Test, Build
+    runs-on: ubuntu-latest
+
+    env:
+      # Supabase CI project — set these in GitHub repo Settings → Secrets → Actions
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CI_NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.CI_NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+      ENCRYPTION_KEY: ${{ secrets.CI_ENCRYPTION_KEY }}
+      # Dummy values for external APIs — unit tests mock these; no real calls made in CI
+      FINNHUB_API_KEY: ci-placeholder
+      FMP_API_KEY: ci-placeholder
+      RESEND_API_KEY: ci-placeholder
+      EXCHANGERATE_API_KEY: ci-placeholder
+      CRON_SECRET: ci-placeholder
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript type-check
+        run: pnpm type-check
+
+      - name: Run unit tests
+        run: pnpm test --run
+
+      - name: Check test coverage
+        run: pnpm test:coverage --run
+
+      - name: Build Next.js app
+        run: pnpm build

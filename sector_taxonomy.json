@@ -1,0 +1,17 @@
+{
+  "_comment": "Static peer fallback for GET /api/assets/:id/peers when Finnhub is unavailable. Maps sector names to arrays of representative tickers. Add tickers here as the portfolio grows. Source: public market classification data.",
+  "_schema": "{ [sector: string]: string[] }",
+  "_usage": "Look up asset.sector from assets table, return matching array excluding the queried ticker itself.",
+  "Technology": ["AAPL", "MSFT", "GOOGL", "META", "NVDA", "TSLA", "AMZN", "AMD", "INTC", "CRM"],
+  "Finance": ["JPM", "BAC", "WFC", "GS", "MS", "C", "BLK", "AXP", "V", "MA"],
+  "Healthcare": ["JNJ", "UNH", "PFE", "ABBV", "MRK", "TMO", "ABT", "DHR", "BMY", "LLY"],
+  "ConsumerDiscretionary": ["HD", "NKE", "MCD", "SBUX", "TGT", "LOW", "BKNG", "CMG", "YUM", "DPZ"],
+  "ConsumerStaples": ["WMT", "PG", "KO", "PEP", "COST", "PM", "MO", "CL", "GIS", "K"],
+  "Energy": ["XOM", "CVX", "COP", "EOG", "SLB", "MPC", "VLO", "OXY", "PSX", "DVN"],
+  "Industrials": ["HON", "UPS", "CAT", "DE", "GE", "MMM", "RTX", "LMT", "NOC", "BA"],
+  "Utilities": ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "PCG", "ED", "XEL"],
+  "Materials": ["LIN", "APD", "ECL", "SHW", "FCX", "NEM", "NUE", "VMC", "MLM", "ALB"],
+  "RealEstate": ["AMT", "PLD", "CCI", "EQIX", "PSA", "DLR", "O", "WELL", "SPG", "AVB"],
+  "CommunicationServices": ["GOOGL", "META", "NFLX", "DIS", "CMCSA", "VZ", "T", "TMUS", "EA", "TTWO"],
+  "Crypto": ["BTC", "ETH", "BNB", "SOL", "ADA", "DOGE", "XRP", "DOT", "AVAX", "MATIC"]
+}

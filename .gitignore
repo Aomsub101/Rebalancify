@@ -1,13 +1,41 @@
+# Environment — never commit real credentials
+.env
+.env.local
+.env*.local
+# Exception: committed as documentation template
+!.env.example
 
-# Playwright
+# Dependencies
 node_modules/
+package-lock.json
+
+# Next.js build output (added in STORY-002)
+.next/
+dist/
+out/
+
+# Test artifacts
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
 
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
 .beads-credential-key
+.beads/dolt-server.lock
+.beads/dolt-server.log
+.beads/dolt-server.pid
+.beads/dolt-server.port
+.beads/last-touched
+.beads/interactions.jsonl
+
+# IDE
+.claude/
+.cursor/
