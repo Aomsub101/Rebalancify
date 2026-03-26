@@ -1,0 +1,136 @@
+/* Mirror of app/globals.css — must be kept identical.
+   If you edit one, edit the other in the same commit. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    /* ── Fonts ── */
+    --font-sans: var(--font-inter);
+    --font-mono: var(--font-jetbrains-mono);
+
+    /* ── Surfaces ── */
+    --background: 210 17% 98%;
+    --foreground: 221 39% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 221 39% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 221 39% 11%;
+
+    /* ── Primary = Action Blue (shadcn: primary = main interactive colour) ── */
+    --primary: 209 60% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* ── Supporting surfaces ── */
+    --secondary: 213 36% 95%;
+    --secondary-foreground: 214 52% 25%;
+    --muted: 213 27% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* ── Accent = ghost/outline hover surface — NOT interactive ── */
+    --accent: 213 27% 96%;
+    --accent-foreground: 221 39% 11%;
+
+    /* ── Destructive (maps to --negative visually) ── */
+    --destructive: 0 100% 31%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Structure ── */
+    --border: 213 30% 86%;
+    --input: 213 30% 86%;
+    --ring: 209 60% 45%;
+    --radius: 0.5rem;
+
+    /* ── Financial Semantic Tokens ── */
+    --positive: 144 61% 26%;
+    --positive-bg: 139 47% 89%;
+    --warning: 33 100% 40%;
+    --warning-bg: 37 100% 92%;
+    --negative: 0 100% 31%;
+    --negative-bg: 0 79% 91%;
+
+    /* ── Chart Colours ── */
+    --chart-1: 209 60% 45%;
+    --chart-2: 144 61% 26%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 100% 31%;
+    --chart-5: 213 36% 60%;
+
+    /* ── Sidebar — ALWAYS dark navy, both light and dark mode ── */
+    --sidebar-background: 214 52% 25%;
+    --sidebar-foreground: 213 32% 91%;
+    --sidebar-primary: 209 60% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 214 46% 31%;
+    --sidebar-accent-foreground: 213 32% 91%;
+    --sidebar-border: 214 46% 31%;
+    --sidebar-ring: 209 60% 45%;
+  }
+
+  .dark {
+    --background: 225 21% 7%;
+    --foreground: 213 32% 91%;
+    --card: 225 28% 14%;
+    --card-foreground: 213 32% 91%;
+    --popover: 225 28% 14%;
+    --popover-foreground: 213 32% 91%;
+
+    --primary: 209 60% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 213 32% 91%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 213 32% 91%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 209 60% 45%;
+
+    --positive: 142 71% 45%;
+    --positive-bg: 143 61% 20%;
+    --warning: 38 92% 50%;
+    --warning-bg: 21 92% 14%;
+    --negative: 0 84% 60%;
+    --negative-bg: 0 75% 15%;
+
+    --chart-1: 209 60% 45%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 84% 60%;
+    --chart-5: 213 36% 60%;
+
+    /* ── Sidebar — deeper dark in dark mode ── */
+    --sidebar-background: 221 39% 11%;
+    --sidebar-foreground: 213 32% 91%;
+    --sidebar-primary: 209 60% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 213 32% 91%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 209 60% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
