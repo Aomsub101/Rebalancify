@@ -37,7 +37,7 @@
 | Story | Title | Status | Completed |
 |---|---|---|---|
 | STORY-001 | Supabase project + all migrations | ✅ | 2026-03-26 |
-| STORY-002 | Next.js scaffold + auth pages | ⬜ | — |
+| STORY-002 | Next.js scaffold + auth pages | ✅ | 2026-03-26 |
 | STORY-003 | AppShell layout + SessionContext | ⬜ | — |
 | STORY-004 | Environment configuration + Vercel deployment | ⬜ | — |
 
