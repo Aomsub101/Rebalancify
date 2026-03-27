@@ -19,7 +19,7 @@
 
 | Phase | Epic | Status | Started | Completed |
 |---|---|---|---|---|
-| Phase 0 | EPIC-01 Foundation | 🟡 In Progress | — | — |
+| Phase 0 | EPIC-01 Foundation | ✅ Complete | 2026-03-26 | 2026-03-27 |
 | Phase 1 | EPIC-02 Silos & Holdings | ⬜ Planned | — | — |
 | Phase 2 | EPIC-03 Alpaca Integration | ⬜ Planned | — | — |
 | Phase 3 | EPIC-04 Broker Fetch | ⬜ Planned | — | — |

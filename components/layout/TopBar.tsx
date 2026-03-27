@@ -1,7 +1,15 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { Bell } from 'lucide-react'
+import { useSession } from '@/contexts/SessionContext'
+
+async function fetchProfile() {
+  const res = await fetch('/api/profile')
+  if (!res.ok) return null
+  return res.json() as Promise<{ notification_count: number } | null>
+}
 
 const PAGE_TITLES: Record<string, string> = {
   '/overview': 'Overview',
@@ -21,9 +29,15 @@ function getPageTitle(pathname: string): string {
 export function TopBar() {
   const pathname = usePathname()
   const pageTitle = getPageTitle(pathname)
+  const { session } = useSession()
 
-  // TODO STORY-005: replace with useQuery(['profile'], () => fetch('/api/profile').then(r => r.json()))
-  const notificationCount = 0
+  const { data: profileData } = useQuery({
+    queryKey: ['profile'],
+    queryFn: fetchProfile,
+    enabled: !!session,
+  })
+
+  const notificationCount = profileData?.notification_count ?? 0
 
   return (
     <header className="flex items-center justify-between h-14 px-6 border-b border-border bg-background shrink-0">
