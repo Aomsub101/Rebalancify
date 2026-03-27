@@ -15,7 +15,7 @@
 
 **Phase:** 0
 **Version:** v1.0
-**Status:** 🟡 In Progress
+**Status:** ✅ Complete (2026-03-27)
 **PRD mapping:** Section 5 (System Architecture), Section 5.1–5.2 (Deployment, Tech Stack)
 **Scope:** Supabase project setup, all database migrations, Next.js scaffold, authentication flow, AppShell, Vercel deployment pipeline. This epic produces the authenticated shell that all other epics build on top of. Nothing else should be started before this epic is complete.
 

@@ -9,9 +9,16 @@ import {
   Compass,
   Settings2,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/contexts/SessionContext'
 import { cn } from '@/lib/utils'
+
+async function fetchProfile() {
+  const res = await fetch('/api/profile')
+  if (!res.ok) return null
+  return res.json() as Promise<{ active_silo_count: number; display_name: string | null; notification_count: number } | null>
+}
 
 interface NavItem {
   href: string
@@ -30,7 +37,18 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { profile, siloCount } = useSession()
+  const { profile: sessionProfile, session } = useSession()
+
+  // AC #11: useQuery so silo count updates reactively after create/delete invalidations
+  const { data: profileData } = useQuery({
+    queryKey: ['profile'],
+    queryFn: fetchProfile,
+    enabled: !!session,
+  })
+
+  const siloCount = profileData?.active_silo_count ?? 0
+  // Use display_name from API if available, otherwise fall back to session profile
+  const displayName = profileData?.display_name ?? sessionProfile?.display_name ?? null
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -38,8 +56,8 @@ export function Sidebar() {
     router.push('/login')
   }
 
-  const initials = profile?.display_name
-    ? profile.display_name
+  const initials = displayName
+    ? displayName
         .split(' ')
         .map((n) => n[0])
         .join('')
@@ -115,7 +133,7 @@ export function Sidebar() {
           {/* Name + sign-out — desktop only */}
           <div className="hidden lg:flex lg:flex-col lg:flex-1 min-w-0">
             <span className="text-[var(--sidebar-foreground)] text-sm font-medium truncate">
-              {profile?.display_name ?? profile?.email ?? '—'}
+              {displayName ?? sessionProfile?.email ?? '—'}
             </span>
             <button
               onClick={handleSignOut}

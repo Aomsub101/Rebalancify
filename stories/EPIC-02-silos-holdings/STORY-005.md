@@ -6,6 +6,7 @@
 **Derived from:** F2-R1, F2-R2, F2-R3, F2-R7 (silo management), F2-R8 (settings)
 **Connected to:** `docs/architecture/02-database-schema.md` (user_profiles, silos tables), `docs/architecture/03-api-contract.md` (profile and silos endpoints), `docs/architecture/04-component-tree.md` (SiloCard, Settings sections)
 **Critical rules for agents using this file:**
+
 - Do not start implementation until all stories in the Dependencies section are marked ✅ in PROGRESS.md.
 - Do not exceed the scope of this story. If you discover additional work, create a new story.
 - Mark this story complete in PROGRESS.md only after every Definition of Done item is checked.

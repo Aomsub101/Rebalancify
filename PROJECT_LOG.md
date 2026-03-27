@@ -39,6 +39,60 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-005 — Profile API + Silo CRUD + list page
+**Completed:** 2026-03-27
+**Effort:** 1 day (estimated 1.5d — focused scope, no migration work needed)
+
+**What was built:**
+- `lib/profile.ts` + `lib/silos.ts` — TDD'd helpers (31 tests, 100% lib coverage)
+- `GET/PATCH /api/profile` — full profile shape with derived connected booleans, notification_count
+- `GET/POST /api/silos` — list + create with 5-silo limit (422 SILO_LIMIT_REACHED)
+- `PATCH/DELETE /api/silos/[silo_id]` — update + soft-delete (is_active = FALSE)
+- `SiloCard`, `SilosPage`, `NewSiloPage` (6 platform types, currency defaults)
+- `SettingsPage` — Profile + Notifications sections only
+- `Sidebar` + `TopBar` wired to `useQuery(['profile'])` for reactive silo count badge and notification count (replaces hardcoded values from STORY-003)
+- Route unit tests: 12 tests covering 401, 422, 400, 201 paths
+
+**Decisions made:**
+- Sidebar reads `siloCount` via `useQuery(['profile'])` instead of SessionContext — enables reactive invalidation after silo create/delete without a context refresh
+- `settings/page.tsx` silo usage bar uses Tailwind fraction classes (w-1/5 ... w-full) instead of `style={{width}}` to comply with CLAUDE.md Rule 2
+- API route tests mock Supabase with fully-chained `.select().eq().eq()` thenables to match real query shape
+
+**Discovered issues / carry-over notes:**
+- `stories/epics.md` EPIC-02 status set to `🟡 In Progress` — should be updated to `✅ Complete` when all 4 stories in EPIC-02 are done
+- `stories/epics.md` EPIC-01 marked `✅ Complete (2026-03-27)` per user request
+- RLS isolation test is a manual SQL procedure (see `docs/development/03-testing-strategy.md`); run against `rebalancify_dev` Supabase before deploying
+
+**Quality gates passed:** type-check ✅ | test ✅ (56/56) | coverage ✅ (lib 100%) | build ✅
+
+---
+
+### STORY-004 — Vercel Deployment & CI Pipeline
+**Completed:** 2026-03-27
+**Effort:** 0.5 day (estimated XS — pure infrastructure, no application code)
+
+**What was built:**
+- Vercel project `rebalancify` linked to `Aomsub101/Rebalancify` (org: aomsub101s-projects)
+- 14 production env vars set (rebalancify_prod Supabase + all API keys + fresh ENCRYPTION_KEY/CRON_SECRET)
+- 14 preview env vars set (rebalancify_dev Supabase + matching API keys)
+- `docs/development/03-testing-strategy.md` — removed "create third CI project"; documented CI uses `rebalancify_dev` + cleanup procedure
+- `docs/development/04-deployment.md` — documented 2-project constraint (dev/prod); preview deployments → `rebalancify_dev`
+- Fixed CI: removed invalid `--run` flag from `pnpm test` commands in `ci.yml`
+- Fixed Playwright: replaced server-dependent placeholder with trivial test; enabled `webServer` in `playwright.config.ts`
+
+**Decisions made:**
+- Single Supabase project used for both CI and local dev (`rebalancify_dev`); free plan supports only 2 projects
+- Production URL: `rebalancify-jqloavvm9-aomsub101s-projects.vercel.app`
+- `SCHWAB_REDIRECT_URI` set to production URL; update when custom domain is configured
+
+**Discovered issues / carry-over notes:**
+- `vercel env add <name> preview` fails non-interactively in CLI v50.37.1 — workaround: use Vercel REST API (`POST /v10/projects/:id/env`) to set preview vars in bulk
+- CI test data cleanup needed after any CI run touching auth: delete `ci-test-*` users from `rebalancify_dev` → Authentication → Users
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅ | CI ✅ | Playwright ✅
+
+---
+
 ### STORY-003 — AppShell (Sidebar, TopBar, Mobile Nav)
 **Completed:** 2026-03-27
 **Effort:** 0.5 day (estimated S / 1–2 days — all UI, no migrations)

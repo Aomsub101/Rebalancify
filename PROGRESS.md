@@ -19,8 +19,8 @@
 
 | Phase | Epic | Status | Started | Completed |
 |---|---|---|---|---|
-| Phase 0 | EPIC-01 Foundation | 🟡 In Progress | — | — |
-| Phase 1 | EPIC-02 Silos & Holdings | ⬜ Planned | — | — |
+| Phase 0 | EPIC-01 Foundation | ✅ Complete | 2026-03-26 | 2026-03-27 |
+| Phase 1 | EPIC-02 Silos & Holdings | 🟡 In Progress | 2026-03-27 | — |
 | Phase 2 | EPIC-03 Alpaca Integration | ⬜ Planned | — | — |
 | Phase 3 | EPIC-04 Broker Fetch | ⬜ Planned | — | — |
 | Phase 4 | EPIC-05 Drift & Overview | ⬜ Planned | — | — |
@@ -39,7 +39,7 @@
 | STORY-001 | Supabase project + all migrations | ✅ | 2026-03-26 |
 | STORY-002 | Next.js scaffold + auth pages | ✅ | 2026-03-26 |
 | STORY-003 | AppShell layout + SessionContext | ✅ | 2026-03-27 |
-| STORY-004 | Environment configuration + Vercel deployment | ⬜ | — |
+| STORY-004 | Environment configuration + Vercel deployment | ✅ | 2026-03-27 |
 
 ---
 
@@ -47,7 +47,7 @@
 
 | Story | Title | Status | Completed |
 |---|---|---|---|
-| STORY-005 | Profile API + Silo CRUD + list page | ⬜ | — |
+| STORY-005 | Profile API + Silo CRUD + list page | ✅ | 2026-03-27 |
 | STORY-006 | Asset search + ticker mapping | ⬜ | — |
 | STORY-007 | Holdings CRUD (manual entry) + silo detail page | ⬜ | — |
 | STORY-008 | Target weights editor | ⬜ | — |
