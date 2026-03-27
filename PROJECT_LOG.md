@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-003 — AppShell (Sidebar, TopBar, Mobile Nav)
+**Completed:** 2026-03-27
+**Effort:** 0.5 day (estimated S / 1–2 days — all UI, no migrations)
+
+**What was built:**
+- `components/layout/Sidebar.tsx` — always-dark `bg-sidebar` nav rail; 240px desktop, 56px icon rail at 768–1023px, hidden < 768px; active state via `usePathname()`; UserMenu with sign-out; SiloCountBadge from SessionContext
+- `components/layout/TopBar.tsx` — page title (pathname map) + NotificationBell (hardcoded 0; TODO STORY-005)
+- `components/layout/BottomTabBar.tsx` — fixed bottom 5-tab bar, visible only < 768px; `pb-safe` utility for iOS safe-area
+- `components/shared/OfflineBanner.tsx` — SSR-safe online/offline detection; amber warning banner with WifiOff icon
+- `app/(dashboard)/layout.tsx` — server component assembling the full shell
+- `app/(dashboard)/overview/page.tsx` — stub page with metadata + disclaimer footer (needed because middleware redirects to /overview)
+- `.pb-safe` utility added to both `app/globals.css` and `styles/globals.css` (must stay in sync)
+
+**Decisions made:**
+- `app/api/profile/route.ts` intentionally excluded — belongs to STORY-005; creating partial route now would conflict with full response shape. NotificationBell uses hardcoded 0 with TODO comment.
+- `BottomTabBar` uses `pb-safe` CSS utility (not inline `style={}`) for `env(safe-area-inset-bottom)` to comply with CLAUDE.md Rule 2
+
+**Discovered issues / carry-over notes:**
+- `git push` fails — SSH key not configured on this machine. All commits are local; user must push manually or configure SSH key before CI runs.
+- DoD item "GET /api/profile returns notification_count" deferred to STORY-005
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅
+
+---
+
 ### STORY-002 — Next.js Scaffold, Auth, and Middleware
 **Completed:** 2026-03-26
 **Effort:** 1 day (estimated M / 3–5 days — focused scope ran faster)

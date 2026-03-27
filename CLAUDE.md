@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-01 — Foundation
-**Active Story:** STORY-003 — AppShell layout + SessionContext
-**Last Completed:** STORY-002 — Next.js scaffold + auth pages (2026-03-26)
+**Active Story:** STORY-004 — Environment configuration + Vercel deployment
+**Last Completed:** STORY-003 — AppShell layout + SessionContext (2026-03-27)
 
 Update this section manually as stories are completed. Format:
 ```
