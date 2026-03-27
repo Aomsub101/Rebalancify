@@ -139,9 +139,9 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 
 ## 5. Current Build Phase
 
-**Active Epic:** EPIC-01 — Foundation
-**Active Story:** STORY-005 — Profile API + Silo CRUD + list page
-**Last Completed:** STORY-004 — Environment configuration + Vercel deployment (2026-03-27)
+**Active Epic:** EPIC-02 — Silos & Holdings
+**Active Story:** STORY-006 — Asset search + ticker mapping
+**Last Completed:** STORY-005 — Profile API + Silo CRUD + list page (2026-03-27)
 
 Update this section manually as stories are completed. Format:
 ```
