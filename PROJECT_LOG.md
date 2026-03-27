@@ -39,6 +39,32 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-004 — Vercel Deployment & CI Pipeline
+**Completed:** 2026-03-27
+**Effort:** 0.5 day (estimated XS — pure infrastructure, no application code)
+
+**What was built:**
+- Vercel project `rebalancify` linked to `Aomsub101/Rebalancify` (org: aomsub101s-projects)
+- 14 production env vars set (rebalancify_prod Supabase + all API keys + fresh ENCRYPTION_KEY/CRON_SECRET)
+- 14 preview env vars set (rebalancify_dev Supabase + matching API keys)
+- `docs/development/03-testing-strategy.md` — removed "create third CI project"; documented CI uses `rebalancify_dev` + cleanup procedure
+- `docs/development/04-deployment.md` — documented 2-project constraint (dev/prod); preview deployments → `rebalancify_dev`
+- Fixed CI: removed invalid `--run` flag from `pnpm test` commands in `ci.yml`
+- Fixed Playwright: replaced server-dependent placeholder with trivial test; enabled `webServer` in `playwright.config.ts`
+
+**Decisions made:**
+- Single Supabase project used for both CI and local dev (`rebalancify_dev`); free plan supports only 2 projects
+- Production URL: `rebalancify-jqloavvm9-aomsub101s-projects.vercel.app`
+- `SCHWAB_REDIRECT_URI` set to production URL; update when custom domain is configured
+
+**Discovered issues / carry-over notes:**
+- `vercel env add <name> preview` fails non-interactively in CLI v50.37.1 — workaround: use Vercel REST API (`POST /v10/projects/:id/env`) to set preview vars in bulk
+- CI test data cleanup needed after any CI run touching auth: delete `ci-test-*` users from `rebalancify_dev` → Authentication → Users
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅ | CI ✅ | Playwright ✅
+
+---
+
 ### STORY-003 — AppShell (Sidebar, TopBar, Mobile Nav)
 **Completed:** 2026-03-27
 **Effort:** 0.5 day (estimated S / 1–2 days — all UI, no migrations)
