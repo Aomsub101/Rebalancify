@@ -48,7 +48,7 @@
 | Story | Title | Status | Completed |
 |---|---|---|---|
 | STORY-005 | Profile API + Silo CRUD + list page | ✅ | 2026-03-27 |
-| STORY-006 | Asset search + ticker mapping | ⬜ | — |
+| STORY-006 | Asset search + ticker mapping | ✅ | 2026-03-27 |
 | STORY-007 | Holdings CRUD (manual entry) + silo detail page | ⬜ | — |
 | STORY-008 | Target weights editor | ⬜ | — |
 

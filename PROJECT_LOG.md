@@ -39,6 +39,34 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-006 — Asset search, mapping & price caching
+**Completed:** 2026-03-27
+**Effort:** 1 day (estimated 2d — clean TDD loop ran efficiently)
+
+**What was built:**
+- `lib/formatNumber.ts` — canonical number formatter (price/weight/drift/quantity/staleness), TDD'd with NaN guard
+- `lib/priceService.ts` — 3-tier price cache: `price_cache_fresh` view → Finnhub/CoinGecko API → `price_cache` upsert
+- `GET /api/assets/search` — Finnhub (stock/ETF) and CoinGecko (crypto) proxy, max 5 results, 503 on upstream failure
+- `POST /api/silos/[silo_id]/asset-mappings` — upserts `assets` on `(ticker, price_source)`, 409 on duplicate mapping, best-effort price cache after mapping
+- `GET /api/silos/[silo_id]/asset-mappings` — returns mappings joined with asset details
+- `components/silo/AssetSearchModal.tsx` — Dialog with TypeSelector, 300ms debounced search, Add button with toast feedback
+- `components/silo/SiloDetailView.tsx` — client component with TanStack Query, holdings stub table (quantity: 0), loading/error/empty states
+- `app/(dashboard)/silos/[silo_id]/page.tsx` — server component shell with `generateMetadata`, auth guard, RLS-safe silo ownership check
+- Installed 6 missing shadcn/ui primitives: Dialog, Button, Input, Label, RadioGroup, Skeleton
+
+**Decisions made:**
+- `fetchPrice()` failure in POST /asset-mappings is best-effort (silently caught) — mapping creation must never fail due to a price cache issue
+- `formatNumber` created in `lib/formatNumber.ts` (not `lib/utils.ts`) — separate file keeps the formatter self-contained and easily testable
+- SiloDetailView quantity column shows `formatNumber('0', 'quantity', ...)` — STORY-007 will add real holdings quantities via the `holdings` table
+
+**Discovered issues / carry-over notes:**
+- `SiloCard.tsx` (from STORY-005) uses `toLocaleString()` directly — violates CLAUDE.md Rule 17; fix in a future story
+- The silo detail page at `/silos/[silo_id]` is a stub — STORY-007 expands it with full holdings CRUD
+
+**Quality gates passed:** type-check ✅ | test ✅ (92/92) | coverage ✅ (lib/ 96–97%) | build ✅ | RLS ✅
+
+---
+
 ### STORY-005 — Profile API + Silo CRUD + list page
 **Completed:** 2026-03-27
 **Effort:** 1 day (estimated 1.5d — focused scope, no migration work needed)
