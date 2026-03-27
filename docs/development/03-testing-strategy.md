@@ -222,15 +222,16 @@ The workflow file is created in **PART C** of this prompt as a new file at `reba
 
 ### Setting Up the Supabase Connection for CI
 
-The CI environment needs to run against a Supabase instance for integration tests. Use a **separate** Supabase project for CI (never the production project):
+The CI environment runs against `rebalancify_dev`. The free Supabase plan supports exactly 2 projects (dev and prod). Do NOT create a third CI project.
 
-1. Create a third Supabase project: "rebalancify-ci"
-2. Run all migrations against it
-3. In GitHub: repository Settings → Secrets and variables → Actions → add these secrets:
-   - `CI_NEXT_PUBLIC_SUPABASE_URL` — the CI project URL
-   - `CI_NEXT_PUBLIC_SUPABASE_ANON_KEY` — the CI project anon key
-   - `CI_SUPABASE_SERVICE_ROLE_KEY` — the CI project service role key
-   - `CI_ENCRYPTION_KEY` — a random 32-byte hex key for CI only
+1. Use `rebalancify_dev` for CI. Migrations are already applied from STORY-001.
+2. In GitHub: repository Settings → Secrets and variables → Actions → add these secrets:
+   - `CI_NEXT_PUBLIC_SUPABASE_URL` — the `rebalancify_dev` project URL
+   - `CI_NEXT_PUBLIC_SUPABASE_ANON_KEY` — the `rebalancify_dev` anon key
+   - `CI_SUPABASE_SERVICE_ROLE_KEY` — the `rebalancify_dev` service role key
+   - `CI_ENCRYPTION_KEY` — a random 32-byte hex key for CI only (different from dev and prod)
+
+**CI test data cleanup:** CI runs that touch auth or RLS tests create users/rows in `rebalancify_dev`. After each such CI run, delete any `ci-test-*` users from Supabase → Authentication → Users and remove associated rows from `user_profiles`. This prevents test pollution accumulating in the dev database.
 
 These secrets are injected as environment variables when GitHub runs your tests. They are never visible in logs.
 

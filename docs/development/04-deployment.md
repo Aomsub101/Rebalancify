@@ -20,9 +20,12 @@
 
 ### Supabase Production
 
-1. Create a separate Supabase project for production (not the same as development).
-2. Run all migrations against the production project: `supabase db push --project-ref [prod-ref]`.
-3. Enable pgvector and pg_cron extensions on the production project.
+1. Use `rebalancify_prod` as the production Supabase project (separate from `rebalancify_dev`).
+   Free plan supports exactly 2 projects: dev and prod. Do not create additional projects.
+2. Migrations are applied to `rebalancify_prod` manually via the SQL Editor or Supabase CLI:
+   `supabase db push --project-ref [prod-ref]`
+3. Enable pgvector and pg_cron extensions on `rebalancify_prod`.
+4. Preview deployments (Vercel PR previews) connect to `rebalancify_dev` — never to `rebalancify_prod`.
 
 ### Environment Variable Security
 
@@ -35,7 +38,7 @@
 
 ### Preview Deployments
 
-Vercel automatically creates preview deployments for every pull request. Preview deployments connect to the development Supabase project. Never connect a preview deployment to the production Supabase project.
+Vercel automatically creates preview deployments for every pull request. Preview deployments connect to `rebalancify_dev`. Never connect a preview deployment to `rebalancify_prod`. This is enforced by setting Preview environment variables in Vercel to use `rebalancify_dev` credentials.
 
 ---
 
