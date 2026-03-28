@@ -189,6 +189,17 @@ describe('POST /api/silos/[silo_id]/holdings', () => {
     expect(body.id).toBe(HOLDING_ID)
   })
 
+  it('returns 400 when asset_id is missing', async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null })
+    mockFrom.mockReturnValueOnce(makeSiloMock())
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity: '10.00000000' }), // no asset_id
+    })
+    const res = await POST(req, makeParams())
+    expect(res.status).toBe(400)
+  })
+
   it('ignores price field in request body (AC2)', async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null })
     const upsertFn = vi.fn().mockReturnValue({

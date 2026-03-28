@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 
 type Params = Promise<{ silo_id: string }>
@@ -56,24 +57,29 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
 
-  // Compute totals
-  const now = Date.now()
-  const cashBalance = rows.reduce((sum, h) => sum + parseFloat((h.cash_balance as string) ?? '0'), 0)
+  // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
+  const cashBalance = rows.reduce((sum, h) =>
+    sum.plus(new Decimal(h.cash_balance as string ?? '0')),
+    new Decimal(0)
+  )
   const holdingsValue = rows.reduce((sum, h) => {
-    const price = parseFloat(priceMap.get(h.asset_id) ?? '0')
-    return sum + parseFloat(h.quantity as string) * price
-  }, 0)
-  const totalValue = holdingsValue + cashBalance
+    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
+    return sum.plus(new Decimal(h.quantity as string).mul(price))
+  }, new Decimal(0))
+  const totalValue = holdingsValue.plus(cashBalance)
 
   // Compute per-holding derived values
+  const now = Date.now()
   const holdings = rows.map(h => {
     const asset = h.assets as { ticker: string; name: string; asset_type: string }
-    const price = parseFloat(priceMap.get(h.asset_id) ?? '0')
-    const qty = parseFloat(h.quantity as string)
-    const currentValue = qty * price
-    const currentWeightPct = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
-    const targetWeightPct = targetMap.get(h.asset_id) ?? 0
-    const driftPct = currentWeightPct - targetWeightPct
+    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
+    const qty = new Decimal(h.quantity as string)
+    const currentValue = qty.mul(price)
+    const currentWeightPct = totalValue.gt(0)
+      ? currentValue.div(totalValue).mul(100)
+      : new Decimal(0)
+    const targetWeightPct = new Decimal(targetMap.get(h.asset_id) ?? 0)
+    const driftPct = currentWeightPct.minus(targetWeightPct)
     const staleDays = Math.floor((now - new Date(h.last_updated_at as string).getTime()) / 86_400_000)
 
     return {
@@ -89,7 +95,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       current_weight_pct: parseFloat(currentWeightPct.toFixed(3)),
       target_weight_pct: parseFloat(targetWeightPct.toFixed(3)),
       drift_pct: parseFloat(driftPct.toFixed(3)),
-      drift_breached: Math.abs(driftPct) > Number(silo.drift_threshold),
+      drift_breached: driftPct.abs().gt(new Decimal(silo.drift_threshold)),
       source: h.source,
       stale_days: staleDays,
       last_updated_at: h.last_updated_at,
@@ -134,6 +140,9 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   const { asset_id, quantity, cost_basis, cash_balance } = body
   if (!asset_id) {
     return NextResponse.json({ error: { code: 'INVALID_VALUE', message: 'asset_id is required' } }, { status: 400 })
+  }
+  if (quantity !== undefined && (isNaN(Number(quantity)) || Number(quantity) < 0)) {
+    return NextResponse.json({ error: { code: 'INVALID_VALUE', message: 'quantity must be a non-negative number' } }, { status: 400 })
   }
 
   // Note: 'price' field is intentionally ignored — never stored in holdings
