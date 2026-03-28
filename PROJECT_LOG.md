@@ -39,6 +39,32 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-016 — Webull Sync & Settings Page Consolidation
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `lib/webull.ts` — `buildWebullSignature` (HMAC-SHA256: timestamp+METHOD+path), `parseWebullPositions` (filters zero qty, handles missing fields); 100% coverage
+- `lib/webull.test.ts` — 17 TDD tests (Red→Green) covering signature determinism, method normalization, response parsing, zero-qty filtering, null safety
+- `app/api/profile/route.ts` — PATCH extended with `webull_key`/`webull_secret` AES-256-GCM encryption (AC1)
+- `app/api/silos/[silo_id]/sync/route.ts` — `syncWebull()`: not-connected 403, network error 503, happy path with upsert, `last_synced_at` update (AC2); 4 new test cases
+- `app/(dashboard)/settings/page.tsx` — BITKUB section (key/secret inputs, ConnectionStatusDot) + Webull section (key/secret inputs, ConnectionStatusDot, $500 advisory UI notice) (AC3/AC4/AC6)
+- `app/(dashboard)/settings/layout.tsx` — server layout exporting `metadata: 'Settings | Rebalancify'` (DoD)
+- `components/rebalance/OrderReviewPanel.tsx` — fixed `investx`→`innovestx` typo in PLATFORM_LABEL; updated ExecutionModeNotice text to match AC5 spec
+
+**Decisions made:**
+- Webull API endpoint/signature pattern is best-effort (timestamp+METHOD+path HMAC-SHA256); verify against official Webull broker developer API once credentials obtained
+- BITKUB settings section was missing from Settings page despite STORY-013 completing the sync; consolidated in this story per AC3 spec ("all five broker sections")
+- Used settings layout.tsx to provide metadata for the client-component Settings page (can't export metadata directly from 'use client' files)
+
+**Discovered issues / carry-over notes:**
+- Webull developer API requires account value ≥ $500; this is UI-only advisory — backend surfaces `BROKER_UNAVAILABLE` if Webull's API rejects the credentials
+- Token/OAuth flow for Webull (if ever needed) deferred to STORY-037 (execution)
+
+**Quality gates passed:** type-check ✅ | test ✅ (260/260) | build ✅
+
+---
+
 ### STORY-015b — Schwab Holdings Sync + Settings UI
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
