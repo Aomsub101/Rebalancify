@@ -73,7 +73,7 @@
 | Story      | Title                                                | Status | Completed |
 | ---------- | ---------------------------------------------------- | ------ | --------- |
 | STORY-013  | BITKUB sync (wallet + ticker prices)                 | ✅     | 2026-03-28 |
-| STORY-014  | InnovestX sync — Settrade equity branch             | ⬜     | —        |
+| STORY-014  | InnovestX sync — Settrade equity branch             | ✅     | 2026-03-28 |
 | STORY-014b | InnovestX sync — digital asset branch + Settings UI | ⬜     | —        |
 | STORY-015  | Schwab OAuth flow + token storage                    | ⬜     | —        |
 | STORY-015b | Schwab holdings sync + Settings UI                   | ⬜     | —        |

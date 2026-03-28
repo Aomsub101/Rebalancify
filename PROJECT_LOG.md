@@ -39,6 +39,26 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-014 — InnovestX Sync — Settrade Equity Branch
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 3d — split into 014 + 014b)
+
+**What was built:**
+- `lib/innovestx.ts` — pure helpers: `buildSettradeBasicAuth` (Base64 OAuth credentials), `parseSettradePortfolio` (portfolio JSON → `SettradePosition[]`); 100% coverage across all metrics
+- `lib/innovestx.test.ts` — 14 TDD tests (Red → Green) covering auth encoding, portfolio parsing, zero-filter, empty input
+- `app/api/profile/route.ts` — PATCH extended with InnovestX equity credentials (`innovestx_key`/`innovestx_secret` → AES-256-GCM encrypted columns); AC1 test added
+- `app/api/silos/[silo_id]/sync/route.ts` — `syncInnovestxEquity()`: Settrade OAuth2 client_credentials flow → account lookup → portfolio fetch → holdings upsert (`source='innovestx_sync'`) → Finnhub prices → `last_synced_at`; partial result + `sync_warnings` when creds missing (AC9)
+
+**Decisions made:**
+- Settrade auth modelled as OAuth2 `client_credentials` with Basic Auth header (App ID:App Secret Base64) — matches Settrade Open API pattern documented at developer.settrade.com
+- Two-step portfolio fetch: GET `/Account` list → GET `/Account/{no}/Portfolio` — accounts endpoint used to resolve `account_no` dynamically; no `account_no` column added to `user_profiles`
+- Finnhub price failures are non-fatal (caught silently) — stale cache is preferable to sync failure
+- Settings UI (AC4) deferred to STORY-014b as documented in story Notes section
+
+**Quality gates passed:** type-check ✅ | test ✅ (193 tests) | coverage ✅ | build ✅
+
+---
+
 ### STORY-013 — BITKUB Holdings Sync
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
