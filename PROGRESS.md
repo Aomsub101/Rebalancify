@@ -22,8 +22,8 @@
 | ------- | --------------------------------------- | -------------- | ---------- | ---------- |
 | Phase 0 | EPIC-01 Foundation                      | ✅ Complete    | 2026-03-26 | 2026-03-27 |
 | Phase 1 | EPIC-02 Silos & Holdings                | ✅ Complete    | 2026-03-27 | 2026-03-28 |
-| Phase 2 | EPIC-03 Alpaca Integration              | 🟡 In Progress | 2026-03-28 | —         |
-| Phase 3 | EPIC-04 Broker Fetch                    | ⬜ Planned     | —         | —         |
+| Phase 2 | EPIC-03 Alpaca Integration              | ✅ Complete    | 2026-03-28 | —         |
+| Phase 3 | EPIC-04 Broker Fetch                    | 🟡 In Progress | —         | —         |
 | Phase 4 | EPIC-05 Drift & Overview                | ⬜ Planned     | —         | —         |
 | Phase 5 | EPIC-06 News Feed                       | ⬜ Planned     | —         | —         |
 | Phase 6 | EPIC-07 Discovery                       | ⬜ Planned     | —         | —         |
@@ -72,7 +72,7 @@
 
 | Story      | Title                                                | Status | Completed |
 | ---------- | ---------------------------------------------------- | ------ | --------- |
-| STORY-013  | BITKUB sync (wallet + ticker prices)                 | ⬜     | —        |
+| STORY-013  | BITKUB sync (wallet + ticker prices)                 | ✅     | 2026-03-28 |
 | STORY-014  | InnovestX sync — Settrade equity branch             | ⬜     | —        |
 | STORY-014b | InnovestX sync — digital asset branch + Settings UI | ⬜     | —        |
 | STORY-015  | Schwab OAuth flow + token storage                    | ⬜     | —        |

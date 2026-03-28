@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-013 — BITKUB Holdings Sync
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `lib/bitkub.ts` — pure helpers: `buildBitkubSignature` (HMAC-SHA256), `parseBitkubTicker` (THB pairs → price map), `parseBitkubWallet` (returns `[holdings[], thbBalance]` tuple)
+- `lib/bitkub.test.ts` — 19 TDD tests, 100% statement/branch coverage on bitkub.ts
+- `app/api/profile/route.ts` — BITKUB key/secret encryption block (mirrors Alpaca pattern)
+- `app/api/silos/[silo_id]/sync/route.ts` — `syncBitkub()` function: parallel ticker+wallet fetch, price_cache upsert, holdings upsert, THB cash balance on first holding, last_synced_at update
+
+**Decisions made:**
+- `parseBitkubWallet` returns a tuple `[holdings, thbBalance]` to avoid a second parse pass for cash — clean API for the route handler
+- Ticker (public) and wallet (authenticated) are fetched in `Promise.all` — one round trip, prices piggyback on the wallet sync (AC3)
+- THB balance stored via same "first holding carries cash_balance" pattern as Alpaca (no schema change needed)
+- BITKUB API base URL `https://api.bitkub.com` is the only place it appears — in the server route only (AC5/security verified with grep)
+
+**Discovered issues / carry-over notes:**
+- BITKUB wallet `error` field must be checked — error code 0 = success; non-zero returns 503
+- BITKUB v2 API uses `POST /api/v2/market/wallet` with body `{"ts": <unix_ms>}` and HMAC-SHA256 signature in `X-BTK-SIGN` header
+
+**Quality gates passed:** type-check ✅ | test 174/174 ✅ | coverage ✅ | build ✅ | security ✅
+
+---
+
 ### STORY-012 — Rebalance history endpoints + UI
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 1d)

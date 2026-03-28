@@ -139,9 +139,9 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 
 ## 5. Current Build Phase
 
-**Active Epic:** EPIC-03 — Alpaca Integration
-**Active Story:** STORY-013 — BITKUB sync (wallet + ticker prices)
-**Last Completed:** STORY-012 — Rebalance history endpoints + UI (2026-03-28)
+**Active Epic:** EPIC-04 — Broker Fetch
+**Active Story:** STORY-014 — InnovestX sync — Settrade equity branch
+**Last Completed:** STORY-013 — BITKUB sync (wallet + ticker prices) (2026-03-28)
 
 Update this section manually as stories are completed. Format:
 ```
