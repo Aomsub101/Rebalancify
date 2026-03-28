@@ -14,10 +14,12 @@ interface ProfileData {
   silo_limit: number
   alpaca_connected: boolean
   alpaca_mode: string
+  bitkub_connected: boolean
   innovestx_equity_connected: boolean
   innovestx_digital_connected: boolean
   schwab_connected: boolean
   schwab_token_expired: boolean
+  webull_connected: boolean
 }
 
 async function fetchProfile(): Promise<ProfileData> {
@@ -73,9 +75,25 @@ export default function SettingsPage() {
   const [isSavingInvxDigital, setIsSavingInvxDigital] = useState(false)
   const [invxDigitalSaved, setInvxDigitalSaved] = useState(false)
 
+  // BITKUB state
+  const [bitkubKey, setBitkubKey] = useState('')
+  const [bitkubSecret, setBitkubSecret] = useState('')
+  const [showBitkubKey, setShowBitkubKey] = useState(false)
+  const [showBitkubSecret, setShowBitkubSecret] = useState(false)
+  const [isSavingBitkub, setIsSavingBitkub] = useState(false)
+  const [bitkubSaved, setBitkubSaved] = useState(false)
+
   // Schwab state — OAuth based, no key input needed
   const [schwabConnected, setSchwabConnected] = useState(false)
   const [schwabTokenExpired, setSchwabTokenExpired] = useState(false)
+
+  // Webull state
+  const [webullKey, setWebullKey] = useState('')
+  const [webullSecret, setWebullSecret] = useState('')
+  const [showWebullKey, setShowWebullKey] = useState(false)
+  const [showWebullSecret, setShowWebullSecret] = useState(false)
+  const [isSavingWebull, setIsSavingWebull] = useState(false)
+  const [webullSaved, setWebullSaved] = useState(false)
 
   useEffect(() => {
     if (profile) {
@@ -84,10 +102,12 @@ export default function SettingsPage() {
       setAlpacaMode((profile.alpaca_mode as 'paper' | 'live') ?? 'paper')
       // After load, reset input fields — saved keys are masked as ••••••••
       setAlpacaSaved(profile.alpaca_connected)
+      setBitkubSaved(profile.bitkub_connected)
       setInvxEquitySaved(profile.innovestx_equity_connected)
       setInvxDigitalSaved(profile.innovestx_digital_connected)
       setSchwabConnected(profile.schwab_connected)
       setSchwabTokenExpired(profile.schwab_token_expired)
+      setWebullSaved(profile.webull_connected)
     }
   }, [profile])
 
@@ -197,6 +217,52 @@ export default function SettingsPage() {
       setSaveError(err instanceof Error ? err.message : 'Failed to save InnovestX digital credentials.')
     } finally {
       setIsSavingInvxDigital(false)
+    }
+  }
+
+  async function handleSaveBitkub() {
+    setSaveError(null)
+    setIsSavingBitkub(true)
+    try {
+      const fields: Record<string, unknown> = {}
+      if (bitkubKey.trim()) fields.bitkub_key = bitkubKey.trim()
+      if (bitkubSecret.trim()) fields.bitkub_secret = bitkubSecret.trim()
+      if (Object.keys(fields).length === 0) return
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setBitkubKey('')
+      setBitkubSecret('')
+      setShowBitkubKey(false)
+      setShowBitkubSecret(false)
+      setBitkubSaved(true)
+      toast.success('BITKUB credentials saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save BITKUB credentials.')
+    } finally {
+      setIsSavingBitkub(false)
+    }
+  }
+
+  async function handleSaveWebull() {
+    setSaveError(null)
+    setIsSavingWebull(true)
+    try {
+      const fields: Record<string, unknown> = {}
+      if (webullKey.trim()) fields.webull_key = webullKey.trim()
+      if (webullSecret.trim()) fields.webull_secret = webullSecret.trim()
+      if (Object.keys(fields).length === 0) return
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setWebullKey('')
+      setWebullSecret('')
+      setShowWebullKey(false)
+      setShowWebullSecret(false)
+      setWebullSaved(true)
+      toast.success('Webull credentials saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save Webull credentials.')
+    } finally {
+      setIsSavingWebull(false)
     }
   }
 
@@ -469,6 +535,103 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* BITKUB section — AC3, AC4, AC6 */}
+      <section aria-labelledby="bitkub-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 id="bitkub-heading" className="text-xl font-medium text-foreground">BITKUB</h2>
+          {/* ConnectionStatusDot — AC4 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {profile?.bitkub_connected || bitkubSaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">BITKUB API Key and API Secret for crypto holdings.</p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="bitkub-key" className="block text-sm font-medium text-foreground mb-1.5">
+              API Key
+            </label>
+            <div className="relative">
+              <input
+                id="bitkub-key"
+                type={showBitkubKey ? 'text' : 'password'}
+                value={bitkubKey}
+                onChange={(e) => setBitkubKey(e.target.value)}
+                placeholder={bitkubSaved ? '••••••••' : 'Paste your BITKUB API Key'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowBitkubKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showBitkubKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showBitkubKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="bitkub-secret" className="block text-sm font-medium text-foreground mb-1.5">
+              API Secret
+            </label>
+            <div className="relative">
+              <input
+                id="bitkub-secret"
+                type={showBitkubSecret ? 'text' : 'password'}
+                value={bitkubSecret}
+                onChange={(e) => setBitkubSecret(e.target.value)}
+                placeholder={bitkubSaved ? '••••••••' : 'Paste your BITKUB API Secret'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowBitkubSecret(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showBitkubSecret ? 'Hide API secret' : 'Show API secret'}
+              >
+                {showBitkubSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveBitkub}
+            disabled={isSavingBitkub || (!bitkubKey.trim() && !bitkubSecret.trim())}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingBitkub ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
       {/* InnovestX — Settrade Equity section — AC6 */}
       <section aria-labelledby="invx-equity-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
         <div className="flex items-center justify-between mb-1">
@@ -721,6 +884,110 @@ export default function SettingsPage() {
           >
             {schwabConnected ? 'Reconnect with Schwab' : 'Connect with Schwab'}
           </a>
+        </div>
+      </section>
+
+      {/* Webull section — AC3, AC4, AC6 */}
+      <section aria-labelledby="webull-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 id="webull-heading" className="text-xl font-medium text-foreground">Webull</h2>
+          {/* ConnectionStatusDot — AC4 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {profile?.webull_connected || webullSaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-1">
+          Webull API Key and API Secret for US stock and ETF holdings.
+        </p>
+        {/* AC3: UI-only advisory — not enforced by backend */}
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          Webull requires a $500 minimum account value for API access.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="webull-key" className="block text-sm font-medium text-foreground mb-1.5">
+              API Key
+            </label>
+            <div className="relative">
+              <input
+                id="webull-key"
+                type={showWebullKey ? 'text' : 'password'}
+                value={webullKey}
+                onChange={(e) => setWebullKey(e.target.value)}
+                placeholder={webullSaved ? '••••••••' : 'Paste your Webull API Key'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebullKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showWebullKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showWebullKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="webull-secret" className="block text-sm font-medium text-foreground mb-1.5">
+              API Secret
+            </label>
+            <div className="relative">
+              <input
+                id="webull-secret"
+                type={showWebullSecret ? 'text' : 'password'}
+                value={webullSecret}
+                onChange={(e) => setWebullSecret(e.target.value)}
+                placeholder={webullSaved ? '••••••••' : 'Paste your Webull API Secret'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebullSecret(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showWebullSecret ? 'Hide API secret' : 'Show API secret'}
+              >
+                {showWebullSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveWebull}
+            disabled={isSavingWebull || (!webullKey.trim() && !webullSecret.trim())}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingWebull ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </section>
 

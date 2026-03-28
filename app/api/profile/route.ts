@@ -138,6 +138,22 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // Webull credentials — STORY-016 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
+  if ('webull_key' in body || 'webull_secret' in body) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    if ('webull_key' in body && typeof body.webull_key === 'string' && body.webull_key.length > 0) {
+      allowed.webull_key_enc = encrypt(body.webull_key, encKey)
+    }
+    if ('webull_secret' in body && typeof body.webull_secret === 'string' && body.webull_secret.length > 0) {
+      allowed.webull_secret_enc = encrypt(body.webull_secret, encKey)
+    }
+  }
+
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })
   }

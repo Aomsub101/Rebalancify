@@ -35,6 +35,8 @@ const MOCK_INVX_KEY_ENC = encrypt('SETTRADE_APP_ID', TEST_ENC_KEY)
 const MOCK_INVX_SECRET_ENC = encrypt('SETTRADE_APP_SECRET', TEST_ENC_KEY)
 const MOCK_SCHWAB_ACCESS_ENC = encrypt('schwab-access-token-xyz', TEST_ENC_KEY)
 const MOCK_SCHWAB_REFRESH_ENC = encrypt('schwab-refresh-token-abc', TEST_ENC_KEY)
+const MOCK_WEBULL_KEY_ENC = encrypt('WBL_API_KEY_TEST', TEST_ENC_KEY)
+const MOCK_WEBULL_SECRET_ENC = encrypt('WBL_API_SECRET_TEST', TEST_ENC_KEY)
 
 const mockGetUser = vi.fn()
 
@@ -518,6 +520,111 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.platform).toBe('schwab')
+    expect(body.holdings_updated).toBe(0)
+  })
+})
+
+// ── Webull sync tests — STORY-016 ─────────────────────────────────────────────
+
+describe('POST /api/silos/:silo_id/sync — Webull branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+  })
+
+  function makeWebullSiloMock(profileData: Record<string, unknown>) {
+    return (table: string) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'webull' }, error: null })
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { select: vi.fn().mockReturnValue(selectChain), update: vi.fn().mockReturnValue(upd) }
+      }
+      if (table === 'user_profiles') {
+        return { select: vi.fn().mockReturnValue(eqChain({ data: profileData, error: null })) }
+      }
+      if (table === 'assets') {
+        const mb: Record<string, unknown> = {}
+        mb.eq = vi.fn().mockReturnValue(mb)
+        mb.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+        const ins = { select: vi.fn().mockReturnValue(singleChain({ id: 'asset-uuid-w1' })) }
+        return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
+      }
+      if (table === 'asset_mappings') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'holdings') {
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+      }
+      return {}
+    }
+  }
+
+  it('returns 403 WEBULL_NOT_CONNECTED when no Webull keys are stored', async () => {
+    mockFromImpl = makeWebullSiloMock({ webull_key_enc: null, webull_secret_enc: null })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error.code).toBe('WEBULL_NOT_CONNECTED')
+  })
+
+  it('returns 503 BROKER_UNAVAILABLE when Webull API is unreachable', async () => {
+    mockFromImpl = makeWebullSiloMock({
+      webull_key_enc: MOCK_WEBULL_KEY_ENC,
+      webull_secret_enc: MOCK_WEBULL_SECRET_ENC,
+    })
+    mockFetch.mockRejectedValue(new Error('Network error'))
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error.code).toBe('BROKER_UNAVAILABLE')
+  })
+
+  it('returns 200 with holdings_updated and platform=webull on success', async () => {
+    mockFromImpl = makeWebullSiloMock({
+      webull_key_enc: MOCK_WEBULL_KEY_ENC,
+      webull_secret_enc: MOCK_WEBULL_SECRET_ENC,
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          { ticker: { symbol: 'AAPL', type: 'US_STOCK' }, position: '10.000000', costPrice: '150.000000' },
+          { ticker: { symbol: 'MSFT', type: 'US_STOCK' }, position: '5.000000', costPrice: '200.000000' },
+        ],
+      }),
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('webull')
+    expect(body.holdings_updated).toBe(2)
+    expect(typeof body.synced_at).toBe('string')
+  })
+
+  it('returns 200 with holdings_updated=0 when Webull account has no positions', async () => {
+    mockFromImpl = makeWebullSiloMock({
+      webull_key_enc: MOCK_WEBULL_KEY_ENC,
+      webull_secret_enc: MOCK_WEBULL_SECRET_ENC,
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('webull')
     expect(body.holdings_updated).toBe(0)
   })
 })

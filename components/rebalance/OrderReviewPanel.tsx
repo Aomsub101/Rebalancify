@@ -33,7 +33,7 @@ interface Props {
 const PLATFORM_LABEL: Record<string, string> = {
   alpaca: 'Alpaca',
   bitkub: 'BITKUB',
-  investx: 'InnovestX',
+  innovestx: 'InnovestX',
   schwab: 'Charles Schwab',
   webull: 'Webull',
   dime: 'DIME',
@@ -157,7 +157,7 @@ export function OrderReviewPanel({
             <p className="font-medium text-foreground">Manual execution required</p>
             <p className="text-muted-foreground text-xs mt-0.5">
               These orders will not be submitted automatically.
-              After confirming, you will receive step-by-step instructions to execute them manually on {platformLabel}.
+              After reviewing, you will execute them manually on {platformLabel}.
             </p>
           </div>
         </div>

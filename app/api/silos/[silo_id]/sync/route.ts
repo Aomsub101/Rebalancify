@@ -27,6 +27,7 @@ import {
   INNOVESTX_DIGITAL_CONTENT_TYPE,
 } from '@/lib/innovestx'
 import { parseSchwabPositions, SCHWAB_ACCOUNTS_URL } from '@/lib/schwab'
+import { buildWebullSignature, parseWebullPositions, WEBULL_BASE_URL, WEBULL_POSITIONS_PATH } from '@/lib/webull'
 import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
@@ -114,6 +115,10 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   if (silo.platform_type === 'schwab') {
     return syncSchwab(supabase, user.id, silo_id)
+  }
+
+  if (silo.platform_type === 'webull') {
+    return syncWebull(supabase, user.id, silo_id)
   }
 
   if (silo.platform_type !== 'alpaca') {
@@ -944,5 +949,147 @@ async function syncSchwab(
     synced_at: syncedAt,
     holdings_updated: holdingsUpdated,
     platform: 'schwab',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// WEBULL sync — STORY-016
+// AC1: decrypt webull_key_enc / webull_secret_enc
+// AC2: fetch positions from Webull API, upsert holdings, update last_synced_at
+// AC7: all Webull HTTP calls are server-side only (CLAUDE.md Rule 5)
+// Note: Webull API endpoint patterns are best-effort; verify against official
+//       Webull broker developer API docs once credentials are obtained.
+// ---------------------------------------------------------------------------
+
+async function syncWebull(
+  supabase: SupabaseClient,
+  userId: string,
+  siloId: string,
+): Promise<NextResponse> {
+  const encKey = process.env.ENCRYPTION_KEY
+  if (!encKey) {
+    return NextResponse.json(
+      { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+      { status: 500 },
+    )
+  }
+
+  // 1. Fetch encrypted credentials
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('webull_key_enc, webull_secret_enc')
+    .eq('id', userId)
+    .single()
+
+  if (!profile?.webull_key_enc || !profile?.webull_secret_enc) {
+    return NextResponse.json(
+      { error: { code: 'WEBULL_NOT_CONNECTED', message: 'Webull API key not configured' } },
+      { status: 403 },
+    )
+  }
+
+  let webullKey: string
+  let webullSecret: string
+  try {
+    webullKey = decrypt(profile.webull_key_enc, encKey)
+    webullSecret = decrypt(profile.webull_secret_enc, encKey)
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'DECRYPTION_FAILED', message: 'Failed to decrypt Webull credentials' } },
+      { status: 500 },
+    )
+  }
+
+  // 2. Fetch positions from Webull API (AC2, AC7: server-side only)
+  const timestamp = Date.now().toString()
+  const signature = buildWebullSignature(webullSecret, 'GET', WEBULL_POSITIONS_PATH, timestamp)
+
+  let rawPositions: unknown
+  try {
+    const positionsRes = await fetch(`${WEBULL_BASE_URL}${WEBULL_POSITIONS_PATH}`, {
+      headers: {
+        'X-WBL-APIKEY': webullKey,
+        'X-WBL-SIGNATURE': signature,
+        'X-WBL-TIMESTAMP': timestamp,
+      },
+      cache: 'no-store',
+    })
+    if (!positionsRes.ok) throw new Error(`Webull returned ${positionsRes.status}`)
+    rawPositions = await positionsRes.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'Webull API is unreachable or returned an error' } },
+      { status: 503 },
+    )
+  }
+
+  // 3. Parse and upsert positions
+  const positions = parseWebullPositions(rawPositions)
+  const syncedAt = new Date().toISOString()
+  let holdingsUpdated = 0
+
+  for (const pos of positions) {
+    const { data: existingAsset } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', pos.ticker)
+      .eq('price_source', 'finnhub')
+      .maybeSingle()
+
+    let assetId: string
+    if (existingAsset) {
+      assetId = existingAsset.id
+    } else {
+      const { data: newAsset, error: assetErr } = await supabase
+        .from('assets')
+        .insert({
+          ticker: pos.ticker,
+          name: pos.ticker,
+          asset_type: pos.assetType,
+          price_source: 'finnhub',
+        })
+        .select('id')
+        .single()
+
+      if (assetErr || !newAsset) continue
+      assetId = newAsset.id
+    }
+
+    await supabase
+      .from('asset_mappings')
+      .upsert(
+        { silo_id: siloId, asset_id: assetId, local_label: pos.ticker },
+        { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
+      )
+
+    const { error: holdingErr } = await supabase
+      .from('holdings')
+      .upsert(
+        {
+          silo_id: siloId,
+          asset_id: assetId,
+          quantity: pos.quantity,
+          cost_basis: pos.costBasis ?? null,
+          cash_balance: '0',
+          source: 'webull_sync',
+          last_updated_at: syncedAt,
+        },
+        { onConflict: 'silo_id,asset_id' },
+      )
+
+    if (!holdingErr) holdingsUpdated++
+  }
+
+  // 4. AC2: update silo.last_synced_at
+  await supabase
+    .from('silos')
+    .update({ last_synced_at: syncedAt })
+    .eq('id', siloId)
+    .eq('user_id', userId)
+
+  return NextResponse.json({
+    synced_at: syncedAt,
+    holdings_updated: holdingsUpdated,
+    platform: 'webull',
   })
 }
