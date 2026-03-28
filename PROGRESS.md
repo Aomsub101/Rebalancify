@@ -63,7 +63,7 @@
 | STORY-010  | Rebalance calculator (partial mode + session creation)       | ✅     | 2026-03-28 |
 | STORY-010b | Rebalance calculator (full mode, pre-flight, cash injection) | ✅     | 2026-03-28 |
 | STORY-011  | Rebalancing wizard execute API route (Alpaca + manual)       | ✅     | 2026-03-28 |
-| STORY-011b | Rebalancing wizard UI (3-step: Config, Review, Result)       | ⬜     | —         |
+| STORY-011b | Rebalancing wizard UI (3-step: Config, Review, Result)       | ✅     | 2026-03-28 |
 | STORY-012  | Rebalance history endpoints + UI                             | ⬜     | —         |
 
 ---

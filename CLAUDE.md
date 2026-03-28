@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-03 — Alpaca Integration
-**Active Story:** STORY-011b — Rebalancing wizard UI (3-step: Config, Review, Result)
-**Last Completed:** STORY-011 — Rebalancing wizard execute API route (Alpaca + manual) (2026-03-28)
+**Active Story:** STORY-012 — Rebalance history endpoints + UI
+**Last Completed:** STORY-011b — Rebalancing wizard UI (3-step: Config, Review, Result) (2026-03-28)
 
 Update this section manually as stories are completed. Format:
 ```

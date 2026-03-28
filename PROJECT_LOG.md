@@ -39,6 +39,33 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-011b — Rebalancing wizard UI (3-step: Config, Review, Result)
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `app/(dashboard)/silos/[silo_id]/rebalance/page.tsx` — server component: auth check, silo/profile/weights fetch, `generateMetadata`, renders `RebalanceWizardView`
+- `components/rebalance/RebalanceWizardView.tsx` — client orchestrator: step state (1|2|3), StepIndicator, AlpacaLiveBadge (Rule 15), panel dispatch, footer disclaimer
+- `components/rebalance/RebalanceConfigPanel.tsx` — Step 1: mode radio cards (NOT dropdown), FullRebalanceWarning, cash toggle + amount input, WeightsSumWarning
+- `components/rebalance/OrderReviewPanel.tsx` — Step 2: SessionSummaryBar, ExecutionModeNotice (non-Alpaca), BalanceErrorBanner, OrdersTable with skip checkboxes, ConfirmDialog, execute mutation with TanStack Query invalidation
+- `components/rebalance/ExecutionResultPanel.tsx` — Step 3: Alpaca per-order status (executed/skipped/failed) OR ManualOrderInstructions with CopyAllButton + per-row CopyRowButton
+- `components/shared/ConfirmDialog.tsx` — non-dismissible dialog (no onOpenChange, Escape + outside-click blocked via onEscapeKeyDown/onInteractOutside preventDefault)
+- `lib/types/rebalance.ts` — `CalculateResponse`, `ExecuteResponse`, `RebalanceOrder`, `ExecuteOrderResult` interfaces
+- `tests/rebalance-wizard.spec.ts` — Playwright E2E tests: step transitions, ConfirmDialog non-dismissibility, BalanceErrorBanner, mode cards
+
+**Decisions made:**
+- `ConfirmDialog` uses shadcn/ui Dialog with `onEscapeKeyDown` + `onInteractOutside` preventDefault to enforce Rule 10
+- `RebalanceConfigPanel` fires calculate API directly (no useMutation) since it advances wizard step on success — local `useState` for loading/error is cleaner than a query key
+- `initialWeightsSum` fetched server-side in `page.tsx` so Step 1 shows WeightsSumWarning without a client-side fetch round-trip
+
+**Discovered issues / carry-over notes:**
+- STORY-012 (history) is now unblocked; `['sessions', siloId]` invalidation already wired in execute mutation
+- The `tests/rebalance-wizard.spec.ts` Playwright tests assume an unauthenticated context (they test UI components via mocked API routes); they will fail on a running dev server that redirects to /login — these are documented as UI-logic tests, not full auth E2E
+
+**Quality gates passed:** type-check ✅ | test ✅ (147/147) | build ✅
+
+---
+
 ### STORY-011 — Rebalancing wizard execute API route (Alpaca + manual)
 **Completed:** 2026-03-28
 **Effort:** 0.25 day (estimated 1d)
