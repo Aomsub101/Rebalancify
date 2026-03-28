@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-015 — Schwab OAuth Flow + Token Storage
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 3d — split into 015 + 015b per story Notes)
+
+**What was built:**
+- `lib/schwab.ts` — pure helpers: `buildSchwabAuthUrl` (OAuth 2.0 Authorization Code URL with CSRF state), `buildSchwabBasicAuth` (base64 clientId:clientSecret), `parseSchwabPositions` (accounts array → SchwabPosition[]); constants for auth/token/accounts URLs + 7-day refresh token TTL
+- `lib/schwab.test.ts` — 25 TDD tests (Red→Green) covering auth URL params, basic auth encoding, positions parsing, zero-quantity filtering, null/empty safety
+- `app/api/auth/schwab/route.ts` — GET: generates UUID state, stores in HTTP-only cookie, redirects to Schwab authorization URL; requires authenticated user
+- `app/api/auth/schwab/callback/route.ts` — GET: validates CSRF state cookie, exchanges code for tokens (server-side only), encrypts access + refresh tokens with AES-256-GCM, stores in `user_profiles`, sets `schwab_token_expires = NOW() + 7 days`, clears state cookie, redirects to /settings
+- `lib/innovestx.ts` — **carry-over fix from STORY-014b**: corrected `buildInnovestxDigitalSignature` (10-param format per api-docs.innovestxonline.com: `apiKey+METHOD+host+path+query+contentType+requestUid+timestamp+body`); corrected base URL (`api.innovestxonline.com`), balance path (`/api/v1/digital-asset/account/balance/inquiry`), response parser (`data[].product/amount`)
+- `lib/innovestx.test.ts` — updated 13 Digital tests for corrected format and response shape
+
+**Decisions made:**
+- `schwab_token_expires` stores refresh token expiry (7 days), not access token expiry (30 min) — sync route (STORY-015b) will use refresh token to get fresh access tokens on each call
+- CSRF state stored in HTTP-only cookie (lax sameSite, 60-min TTL) — standard OAuth 2.0 PKCE alternative for server-side flows
+- Schwab API endpoint URLs are based on publicly documented Schwab Individual Trader API patterns; verify exact scope parameter against official docs when developer app is approved
+
+**Discovered issues / carry-over notes:**
+- Schwab developer app requires registration at developer.schwab.com; approval takes 1–4 weeks; end-to-end test not possible until credentials obtained
+- InnovestX Digital API: signature format and endpoint path are now verified against api-docs.innovestxonline.com; base URL confirmed as `api.innovestxonline.com` (not `api-digital.*`)
+
+**Quality gates passed:** type-check ✅ | test ✅ (233/233) | build ✅ | security ✅
+
+---
+
 ### STORY-014b — InnovestX Digital Asset Branch & Settings UI
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
