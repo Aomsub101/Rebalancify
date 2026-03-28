@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-008 — Target weights editor
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `GET /api/silos/[silo_id]/target-weights` — returns `{ weights_sum_pct, cash_target_pct, sum_warning, weights[] }` with asset join for ticker
+- `PUT /api/silos/[silo_id]/target-weights` — atomic delete+insert; validates each `weight_pct` ∈ [0,100] → 422; sum ≠ 100 → `sum_warning: true` (not blocked)
+- `TargetWeightCell` — inline editable for ALL silo types (click to edit, Enter/Escape, blur commits); local state, not auto-saved
+- `WeightsSumBar` — now accepts `weightsSumPct` as prop from SiloDetailView local state (real-time AC5); uses new `WeightsSumWarning` (exact AC6 text)
+- `CashBalanceRow` — broken out of colspan=3; Target column shows live `cashTargetPct` read-only (AC7)
+- `DirtyStateContext` + `useDirtyGuard` — `beforeunload` listener when dirty; Sidebar/BottomTabBar read context for amber Silos indicator; nav clicks intercepted with `window.confirm()` when dirty (AC9)
+- 13 new route tests (TDD red→green); 118 total tests pass
+
+**Decisions made:**
+- `WeightsSumBar` no longer computes sum internally — caller (SiloDetailView) computes from local state to enable real-time updates without waiting for server
+- Delete+insert for atomic replacement (no DB transaction needed; partial state is recoverable by re-saving)
+- Sidebar changed from `<Link>` to `<button onClick>` to support dirty-state interception — `aria-current` preserved
+
+**Discovered issues / carry-over notes:**
+- None
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅
+
+---
+
 ### STORY-007 — Holdings CRUD (manual entry) + silo detail page
 **Completed:** 2026-03-28
 **Effort:** 1 day (estimated 2d — subagent-driven TDD loop was efficient)
