@@ -1,3 +1,6 @@
+import { AlertCircle } from 'lucide-react'
+import { formatNumber } from '@/lib/formatNumber'
+
 interface HoldingSlice {
   ticker: string
   current_weight_pct: number
@@ -22,14 +25,15 @@ export function WeightsSumBar({ holdings }: Props) {
             key={h.ticker}
             className="h-full bg-primary opacity-80"
             style={{ width: `${Math.max(0, h.current_weight_pct)}%` }}
-            title={`${h.ticker}: ${h.current_weight_pct.toFixed(2)}%`}
+            title={`${h.ticker}: ${formatNumber(h.current_weight_pct, 'weight')}`}
           />
         ))}
       </div>
       {/* Warning when target weights don't sum to 100 */}
       {sumWarning ? (
-        <p className="text-xs text-warning">
-          Target weights sum to {weightsSumPct.toFixed(1)}%. Remaining {cashTargetPct.toFixed(1)}% held as cash.
+        <p className="flex items-center gap-1 text-xs text-warning">
+          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          Target weights sum to {formatNumber(weightsSumPct, 'weight')}. Remaining {formatNumber(cashTargetPct, 'weight')} held as cash.
         </p>
       ) : null}
     </div>

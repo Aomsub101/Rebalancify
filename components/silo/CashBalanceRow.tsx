@@ -24,7 +24,6 @@ export function CashBalanceRow({ cashBalance, baseCurrency }: Props) {
       <td className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
         —
       </td>
-      <td className="px-4 py-3" />
     </tr>
   )
 }

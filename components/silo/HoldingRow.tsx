@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import Decimal from 'decimal.js'
 import { DriftBadge } from '@/components/shared/DriftBadge'
 import { StalenessTag } from '@/components/shared/StalenessTag'
 import { formatNumber } from '@/lib/formatNumber'
@@ -47,7 +48,7 @@ export function HoldingRow({ holding, siloId, driftThreshold, isManual, baseCurr
       const res = await fetch(`/api/silos/${siloId}/holdings/${holding.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: parseFloat(newQuantity).toFixed(8) }),
+        body: JSON.stringify({ quantity: new Decimal(newQuantity).toFixed(8) }),
       })
       if (!res.ok) throw new Error('Failed to update')
       return res.json()
