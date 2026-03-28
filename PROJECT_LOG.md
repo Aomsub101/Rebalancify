@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-018 — FX Rates Endpoint + USD Conversion Toggle
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 0.5d)
+
+**What was built:**
+- `lib/fxRates.ts` — `parseExchangeRates` (validates ExchangeRate-API v6 JSON) + `rateToUsd` (computes NUMERIC(20,8) string); 9 TDD tests
+- `app/api/fx-rates/route.ts` — GET with 60-min TTL; fetches user's silo currencies; calls ExchangeRate-API v6 (USD base); upserts via `onConflict: 'currency'`; graceful fallback to stale cache on API failure (AC-4)
+- `contexts/SessionContext.tsx` — fixed field name bug (`show_usd` → `show_usd_toggle`); added `setShowUSD` for optimistic toggle updates
+- `components/layout/TopBar.tsx` — USD toggle button visible on `/overview`; uses React Query for FX availability check; disabled with CSS tooltip when FX unavailable (AC-8); CLAUDE.md Rule 13 (non-colour signal: DollarSign icon)
+- `components/silo/SiloCard.tsx` — `showUSD` + `usdRate` props; display-only USD conversion (AC-7); STORY-019 will wire these props from the overview page
+
+**Decisions made:**
+- ExchangeRate-API URL: `v6.exchangerate-api.com/v6/{KEY}/latest/USD` — free tier, all rates relative to USD; rate_to_usd = 1/conversion_rate
+- USD always included in currency list (consistent DB state even for USD-only users)
+- Toggle state kept in SessionContext as local useState + persisted via PATCH /api/profile; optimistic update avoids refetch latency
+
+**Discovered issues / carry-over notes:**
+- STORY-019 must pass `showUSD` + `usdRate` (from fx-rates query) into each `<SiloCard>` to complete AC-7 wiring
+- `fetchFxRates` in TopBar fetches on /overview only; STORY-019 should reuse `queryKey: ['fx-rates']` for zero duplicate requests
+
+**Quality gates passed:** type-check ✅ | test ✅ (295 tests) | build ✅
+
+---
+
 ### STORY-017 — Portfolio Drift Calculation & Indicator
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 1d)
