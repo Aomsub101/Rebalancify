@@ -10,39 +10,14 @@ import { AssetSearchModal } from '@/components/silo/AssetSearchModal'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
+import type { Holding, HoldingsResponse } from '@/lib/types/holdings'
 
 interface SiloData {
   id: string
   name: string
   platform_type: string
-  base_currency: string
+  base_currency: 'USD' | 'THB'
   drift_threshold: number
-}
-
-interface Holding {
-  id: string
-  asset_id: string
-  ticker: string
-  name: string
-  asset_type: string
-  quantity: string
-  cost_basis: string | null
-  current_price: string
-  current_value: string
-  current_weight_pct: number
-  target_weight_pct: number
-  drift_pct: number
-  drift_breached: boolean
-  source: string
-  stale_days: number
-  last_updated_at: string
-}
-
-interface HoldingsResponse {
-  drift_threshold: number
-  cash_balance: string
-  total_value: string
-  holdings: Holding[]
 }
 
 interface Props {
