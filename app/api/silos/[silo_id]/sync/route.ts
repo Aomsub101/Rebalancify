@@ -26,6 +26,7 @@ import {
   INNOVESTX_DIGITAL_BALANCES_PATH,
   INNOVESTX_DIGITAL_CONTENT_TYPE,
 } from '@/lib/innovestx'
+import { parseSchwabPositions, SCHWAB_ACCOUNTS_URL } from '@/lib/schwab'
 import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
@@ -109,6 +110,10 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   if (silo.platform_type === 'innovestx') {
     return syncInnovestx(supabase, user.id, silo_id)
+  }
+
+  if (silo.platform_type === 'schwab') {
+    return syncSchwab(supabase, user.id, silo_id)
   }
 
   if (silo.platform_type !== 'alpaca') {
@@ -785,4 +790,159 @@ async function syncInnovestx(
   if (syncWarnings.length > 0) response.sync_warnings = syncWarnings
 
   return NextResponse.json(response)
+}
+
+// ---------------------------------------------------------------------------
+// SCHWAB sync — STORY-015b
+// AC1: if schwab_token_expires is in the past, return 401 SCHWAB_TOKEN_EXPIRED
+// AC2: fetch positions from trader/v1/accounts?fields=positions, upsert holdings
+// AC3: update last_synced_at after successful sync
+// AC7: all Schwab HTTP calls are server-side only (CLAUDE.md Rule 5)
+// ---------------------------------------------------------------------------
+
+async function syncSchwab(
+  supabase: SupabaseClient,
+  userId: string,
+  siloId: string,
+): Promise<NextResponse> {
+  const encKey = process.env.ENCRYPTION_KEY
+  if (!encKey) {
+    return NextResponse.json(
+      { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+      { status: 500 },
+    )
+  }
+
+  // 1. Fetch Schwab OAuth tokens from user_profiles
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('schwab_access_enc, schwab_refresh_enc, schwab_token_expires')
+    .eq('id', userId)
+    .single()
+
+  if (!profile?.schwab_access_enc || !profile?.schwab_refresh_enc) {
+    return NextResponse.json(
+      { error: { code: 'SCHWAB_NOT_CONNECTED', message: 'Schwab account not connected — complete OAuth flow in Settings' } },
+      { status: 403 },
+    )
+  }
+
+  // AC1: check refresh token expiry — if expired, user must re-authenticate
+  if (profile.schwab_token_expires !== null && new Date(profile.schwab_token_expires) < new Date()) {
+    return NextResponse.json(
+      { error: { code: 'SCHWAB_TOKEN_EXPIRED', message: 'Schwab token has expired — reconnect in Settings' } },
+      { status: 401 },
+    )
+  }
+
+  // 2. Decrypt access token — used for the positions API call
+  let accessToken: string
+  try {
+    accessToken = decrypt(profile.schwab_access_enc, encKey)
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'DECRYPTION_FAILED', message: 'Failed to decrypt Schwab credentials' } },
+      { status: 500 },
+    )
+  }
+
+  // 3. Fetch positions from Schwab trader API (AC2 + AC7: server-side only)
+  let rawAccounts: unknown
+  try {
+    const accountsRes = await fetch(`${SCHWAB_ACCOUNTS_URL}?fields=positions`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      cache: 'no-store',
+    })
+    // AC1: access token expired mid-window → instruct user to reconnect
+    if (accountsRes.status === 401) {
+      return NextResponse.json(
+        { error: { code: 'SCHWAB_TOKEN_EXPIRED', message: 'Schwab access token expired — reconnect in Settings' } },
+        { status: 401 },
+      )
+    }
+    if (!accountsRes.ok) {
+      throw new Error(`Schwab accounts returned ${accountsRes.status}`)
+    }
+    rawAccounts = await accountsRes.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'Schwab API is unreachable or returned an error' } },
+      { status: 503 },
+    )
+  }
+
+  // 4. Parse positions
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const positions = parseSchwabPositions(rawAccounts as any)
+
+  const syncedAt = new Date().toISOString()
+  let holdingsUpdated = 0
+
+  // 5. Upsert each position: find/create asset → ensure asset_mapping → upsert holding
+  for (const pos of positions) {
+    const { data: existingAsset } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', pos.symbol)
+      .eq('price_source', 'finnhub')
+      .maybeSingle()
+
+    let assetId: string
+    if (existingAsset) {
+      assetId = existingAsset.id
+    } else {
+      const { data: newAsset, error: assetErr } = await supabase
+        .from('assets')
+        .insert({
+          ticker: pos.symbol,
+          name: pos.symbol,
+          asset_type: 'stock',
+          price_source: 'finnhub',
+        })
+        .select('id')
+        .single()
+
+      if (assetErr || !newAsset) continue
+      assetId = newAsset.id
+    }
+
+    // Ensure asset_mapping exists for this silo (best-effort, ignore conflict)
+    await supabase
+      .from('asset_mappings')
+      .upsert(
+        { silo_id: siloId, asset_id: assetId, local_label: pos.symbol },
+        { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
+      )
+
+    // Upsert holding — AC2: source = 'schwab_sync'
+    const { error: holdingErr } = await supabase
+      .from('holdings')
+      .upsert(
+        {
+          silo_id: siloId,
+          asset_id: assetId,
+          quantity: pos.quantity,
+          cost_basis: pos.costBasis ?? null,
+          cash_balance: '0',
+          source: 'schwab_sync',
+          last_updated_at: syncedAt,
+        },
+        { onConflict: 'silo_id,asset_id' },
+      )
+
+    if (!holdingErr) holdingsUpdated++
+  }
+
+  // 6. AC3: update silo.last_synced_at
+  await supabase
+    .from('silos')
+    .update({ last_synced_at: syncedAt })
+    .eq('id', siloId)
+    .eq('user_id', userId)
+
+  return NextResponse.json({
+    synced_at: syncedAt,
+    holdings_updated: holdingsUpdated,
+    platform: 'schwab',
+  })
 }

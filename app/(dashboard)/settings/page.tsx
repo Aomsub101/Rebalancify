@@ -16,6 +16,8 @@ interface ProfileData {
   alpaca_mode: string
   innovestx_equity_connected: boolean
   innovestx_digital_connected: boolean
+  schwab_connected: boolean
+  schwab_token_expired: boolean
 }
 
 async function fetchProfile(): Promise<ProfileData> {
@@ -71,6 +73,10 @@ export default function SettingsPage() {
   const [isSavingInvxDigital, setIsSavingInvxDigital] = useState(false)
   const [invxDigitalSaved, setInvxDigitalSaved] = useState(false)
 
+  // Schwab state — OAuth based, no key input needed
+  const [schwabConnected, setSchwabConnected] = useState(false)
+  const [schwabTokenExpired, setSchwabTokenExpired] = useState(false)
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? '')
@@ -80,6 +86,8 @@ export default function SettingsPage() {
       setAlpacaSaved(profile.alpaca_connected)
       setInvxEquitySaved(profile.innovestx_equity_connected)
       setInvxDigitalSaved(profile.innovestx_digital_connected)
+      setSchwabConnected(profile.schwab_connected)
+      setSchwabTokenExpired(profile.schwab_token_expired)
     }
   }, [profile])
 
@@ -654,6 +662,65 @@ export default function SettingsPage() {
           >
             {isSavingInvxDigital ? 'Saving…' : 'Save'}
           </button>
+        </div>
+      </section>
+
+      {/* Charles Schwab section — AC4 (ConnectionStatusDot + TokenExpiryWarning) */}
+      <section aria-labelledby="schwab-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="schwab-heading" className="text-xl font-medium text-foreground">Charles Schwab</h2>
+          {/* ConnectionStatusDot — AC4 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {schwabConnected && !schwabTokenExpired ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : schwabConnected && schwabTokenExpired ? (
+              <>
+                <AlertCircle className="h-4 w-4 text-warning" aria-hidden="true" />
+                <span className="text-warning">Token expired</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          Connect via OAuth to sync your US stock and ETF holdings. Schwab uses secure token-based authentication — no API key required.
+        </p>
+
+        {/* TokenExpiryWarning banner — AC4: shown when schwab_token_expired is true */}
+        {schwabTokenExpired && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-bg px-4 py-3 text-warning text-sm mb-4"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <p className="font-medium">Schwab connection expired</p>
+              <p className="text-xs text-warning/80 mt-0.5">
+                Your Schwab OAuth token has expired. Reconnect below to resume syncing your holdings.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <a
+            href="/api/auth/schwab"
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium inline-block',
+              'bg-primary text-primary-foreground hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            )}
+          >
+            {schwabConnected ? 'Reconnect with Schwab' : 'Connect with Schwab'}
+          </a>
         </div>
       </section>
 

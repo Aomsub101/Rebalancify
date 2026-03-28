@@ -33,6 +33,8 @@ const MOCK_ALPACA_KEY_ENC = encrypt('PKTEST123', TEST_ENC_KEY)
 const MOCK_ALPACA_SECRET_ENC = encrypt('SKTEST456', TEST_ENC_KEY)
 const MOCK_INVX_KEY_ENC = encrypt('SETTRADE_APP_ID', TEST_ENC_KEY)
 const MOCK_INVX_SECRET_ENC = encrypt('SETTRADE_APP_SECRET', TEST_ENC_KEY)
+const MOCK_SCHWAB_ACCESS_ENC = encrypt('schwab-access-token-xyz', TEST_ENC_KEY)
+const MOCK_SCHWAB_REFRESH_ENC = encrypt('schwab-refresh-token-abc', TEST_ENC_KEY)
 
 const mockGetUser = vi.fn()
 
@@ -368,6 +370,154 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
     const res = await POST(req, ctx)
     expect(res.status).toBe(200)
     const body = await res.json()
+    expect(body.holdings_updated).toBe(0)
+  })
+})
+
+// ── Schwab sync tests — STORY-015b ───────────────────────────────────────────
+
+describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+  })
+
+  function makeSchwabSiloMock(profileData: Record<string, unknown>) {
+    return (table: string) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'schwab' }, error: null })
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { select: vi.fn().mockReturnValue(selectChain), update: vi.fn().mockReturnValue(upd) }
+      }
+      if (table === 'user_profiles') {
+        return { select: vi.fn().mockReturnValue(eqChain({ data: profileData, error: null })) }
+      }
+      if (table === 'assets') {
+        const mb: Record<string, unknown> = {}
+        mb.eq = vi.fn().mockReturnValue(mb)
+        mb.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+        const ins = { select: vi.fn().mockReturnValue(singleChain({ id: 'asset-uuid-s1' })) }
+        return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
+      }
+      if (table === 'asset_mappings') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'holdings') {
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+      }
+      return {}
+    }
+  }
+
+  it('returns 403 SCHWAB_NOT_CONNECTED when no Schwab tokens are stored', async () => {
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: null,
+      schwab_refresh_enc: null,
+      schwab_token_expires: null,
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error.code).toBe('SCHWAB_NOT_CONNECTED')
+  })
+
+  it('returns 401 SCHWAB_TOKEN_EXPIRED when token_expires is in the past (AC1)', async () => {
+    const pastDate = new Date(Date.now() - 60_000).toISOString()
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+      schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+      schwab_token_expires: pastDate,
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(401)
+    const body = await res.json()
+    expect(body.error.code).toBe('SCHWAB_TOKEN_EXPIRED')
+  })
+
+  it('returns 503 BROKER_UNAVAILABLE when Schwab API is unreachable', async () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+      schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+      schwab_token_expires: futureDate,
+    })
+    mockFetch.mockRejectedValue(new Error('Network error'))
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error.code).toBe('BROKER_UNAVAILABLE')
+  })
+
+  it('returns 401 SCHWAB_TOKEN_EXPIRED when Schwab API returns 401 (access token expired mid-window)', async () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+      schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+      schwab_token_expires: futureDate,
+    })
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401 })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(401)
+    const body = await res.json()
+    expect(body.error.code).toBe('SCHWAB_TOKEN_EXPIRED')
+  })
+
+  it('returns 200 with holdings_updated and platform=schwab on success (AC2, AC3)', async () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+      schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+      schwab_token_expires: futureDate,
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          securitiesAccount: {
+            positions: [
+              { instrument: { symbol: 'AAPL', assetType: 'EQUITY' }, longQuantity: 10, shortQuantity: 0, costBasis: 1500 },
+              { instrument: { symbol: 'MSFT', assetType: 'EQUITY' }, longQuantity: 5, shortQuantity: 0, costBasis: 2000 },
+            ],
+          },
+        },
+      ],
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('schwab')
+    expect(body.holdings_updated).toBe(2)
+    expect(typeof body.synced_at).toBe('string')
+  })
+
+  it('returns 200 with holdings_updated=0 when Schwab account has no positions', async () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    mockFromImpl = makeSchwabSiloMock({
+      schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+      schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+      schwab_token_expires: futureDate,
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [{ securitiesAccount: { positions: [] } }],
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('schwab')
     expect(body.holdings_updated).toBe(0)
   })
 })
