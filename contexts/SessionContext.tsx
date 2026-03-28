@@ -15,7 +15,8 @@ interface UserProfile {
   email: string
   display_name: string | null
   base_currency: string
-  show_usd: boolean
+  // DB column is show_usd_toggle (fixed from prior show_usd typo)
+  show_usd_toggle: boolean
   created_at: string
   updated_at: string
 }
@@ -25,6 +26,7 @@ interface SessionContextValue {
   user: User | null
   profile: UserProfile | null
   showUSD: boolean
+  setShowUSD: (value: boolean) => void
   siloCount: number
   isLoading: boolean
 }
@@ -34,6 +36,7 @@ const SessionContext = createContext<SessionContextValue>({
   user: null,
   profile: null,
   showUSD: false,
+  setShowUSD: () => undefined,
   siloCount: 0,
   isLoading: true,
 })
@@ -43,6 +46,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [siloCount, setSiloCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  // Local toggle state — mirrors profile.show_usd_toggle but allows optimistic UI updates
+  const [showUSD, setShowUSD] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -59,6 +64,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             .single()
 
           setProfile(profileData ?? null)
+          // Sync local toggle with persisted profile value
+          setShowUSD(profileData?.show_usd_toggle ?? false)
 
           const { count } = await supabase
             .from('silos')
@@ -70,6 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null)
           setSiloCount(0)
+          setShowUSD(false)
         }
 
         setIsLoading(false)
@@ -87,7 +95,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         session,
         user: session?.user ?? null,
         profile,
-        showUSD: profile?.show_usd ?? false,
+        showUSD,
+        setShowUSD,
         siloCount,
         isLoading,
       }}

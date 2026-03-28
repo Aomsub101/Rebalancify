@@ -35,12 +35,26 @@ const PLATFORM_BADGE_COLORS: Record<string, string> = {
 
 interface SiloCardProps {
   silo: SiloCardData
+  /** When true, display value converted to USD (AC-7). Requires usdRate. */
+  showUSD?: boolean
+  /**
+   * rate_to_usd for the silo's base_currency (fetched from GET /api/fx-rates).
+   * If undefined when showUSD=true, falls back to base_currency display.
+   */
+  usdRate?: number
 }
 
-export function SiloCard({ silo }: SiloCardProps) {
+export function SiloCard({ silo, showUSD = false, usdRate }: SiloCardProps) {
   const isAlpacaLive = silo.platform_type === 'alpaca' && silo.alpaca_mode === 'live'
   const platformLabel = PLATFORM_LABELS[silo.platform_type] ?? silo.platform_type
   const badgeColor = PLATFORM_BADGE_COLORS[silo.platform_type] ?? PLATFORM_BADGE_COLORS.manual
+
+  // AC-7: convert to USD only when toggle on AND rate is available — display only, no DB write
+  const useConvertedUSD = showUSD && usdRate !== undefined
+  const rawValue = parseFloat(silo.total_value)
+  const displayValue = useConvertedUSD ? rawValue * usdRate : rawValue
+  const displayCurrency = useConvertedUSD ? 'USD' : silo.base_currency
+  const isEmpty = silo.total_value === '0.00000000'
 
   return (
     <Link
@@ -69,13 +83,15 @@ export function SiloCard({ silo }: SiloCardProps) {
         </span>
       </div>
 
-      {/* Total value */}
+      {/* Total value — AC-6: base_currency when off; AC-7: USD when on */}
       <p className="text-2xl font-mono font-semibold text-foreground tabular-nums">
-        {silo.total_value === '0.00000000'
+        {isEmpty
           ? '—'
-          : `${silo.base_currency} ${parseFloat(silo.total_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          : `${displayCurrency} ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
       </p>
-      <p className="text-xs text-muted-foreground mt-0.5">Total value</p>
+      <p className="text-xs text-muted-foreground mt-0.5">
+        {useConvertedUSD ? 'Total value (USD)' : 'Total value'}
+      </p>
 
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
