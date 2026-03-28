@@ -113,6 +113,9 @@ export function HoldingRow({ holding, siloId, driftThreshold, isManual, baseCurr
         ) : (
           <span
             onClick={handleQuantityClick}
+            role={isManual ? 'button' : undefined}
+            tabIndex={isManual ? 0 : -1}
+            onKeyDown={e => { if (isManual && (e.key === 'Enter' || e.key === ' ')) handleQuantityClick() }}
             className={isManual ? 'cursor-pointer hover:text-primary underline decoration-dotted' : ''}
             title={isManual ? 'Click to edit' : undefined}
           >
