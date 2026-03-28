@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-03 — Alpaca Integration
-**Active Story:** STORY-009 — Alpaca key storage + sync endpoint
-**Last Completed:** STORY-008 — Target weights editor (2026-03-28)
+**Active Story:** STORY-010 — Rebalance calculator (partial mode + session creation)
+**Last Completed:** STORY-009 — Alpaca key storage + sync endpoint (2026-03-28)
 
 Update this section manually as stories are completed. Format:
 ```

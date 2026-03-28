@@ -39,6 +39,33 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-009 — Alpaca key storage + sync endpoint
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `lib/encryption.ts` — AES-256-GCM encrypt/decrypt; TDD (3 tests: round-trip, IV uniqueness, wrong-key throws)
+- `PATCH /api/profile` — handles `alpaca_key`, `alpaca_secret` (encrypt before storage), `alpaca_mode` (paper|live); plaintext never returned
+- `POST /api/silos/:id/sync` — fetches Alpaca `/v2/positions` + `/v2/account`; upserts holdings + asset_mappings; stores cash on first holding; updates `last_synced_at`; returns 503 on broker unreachable, 422 on manual silo
+- `GET /api/silos` — now fetches `alpaca_mode` from `user_profiles` in parallel and includes it per silo
+- `AlpacaLiveBadge` — extracted shared component; used on `SiloCard` and `SiloHeader` (CLAUDE.md Rule 15)
+- `SyncButton` — client component with in-flight spinner and `last_synced_at` timestamp display (AC7)
+- `SiloHeader` — shows `SyncButton` for all non-manual silos; shows `AlpacaLiveBadge` when live
+- Settings page — Alpaca section: password inputs with show/hide toggle, mode selector (paper/live with LIVE warning), `ConnectionStatusDot`
+
+**Decisions made:**
+- Cash from Alpaca account stored as `cash_balance` on the first synced holding; all others reset to 0 — preserves `SUM(cash_balance)` aggregation in GET /holdings
+- `encrypt(plaintext, keyHex)` / `decrypt(ciphertext, keyHex)` take explicit key parameter — enables key-agnostic unit tests without env var dependency
+- `alpaca_mode` sourced from `user_profiles` (not silos) — one mode per user, passed down to silo card/header at the API level
+
+**Discovered issues / carry-over notes:**
+- BITKUB, InnovestX, Schwab, Webull sync routes return 422 `SYNC_NOT_IMPLEMENTED` until their EPIC-04 stories land
+- Settings page only has the Alpaca section; other broker sections (BITKUB, InnovestX, Schwab, Webull) are deferred to EPIC-04 stories
+
+**Quality gates passed:** type-check ✅ | test ✅ (126/126) | build ✅
+
+---
+
 ### STORY-008 — Target weights editor
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 1d)

@@ -21,7 +21,7 @@
 |---|---|---|---|---|
 | Phase 0 | EPIC-01 Foundation | ✅ Complete | 2026-03-26 | 2026-03-27 |
 | Phase 1 | EPIC-02 Silos & Holdings | 🟡 In Progress | 2026-03-27 | — |
-| Phase 2 | EPIC-03 Alpaca Integration | ⬜ Planned | — | — |
+| Phase 2 | EPIC-03 Alpaca Integration | 🟡 In Progress | 2026-03-28 | — |
 | Phase 3 | EPIC-04 Broker Fetch | ⬜ Planned | — | — |
 | Phase 4 | EPIC-05 Drift & Overview | ⬜ Planned | — | — |
 | Phase 5 | EPIC-06 News Feed | ⬜ Planned | — | — |
@@ -58,7 +58,7 @@
 
 | Story | Title | Status | Completed |
 |---|---|---|---|
-| STORY-009 | Alpaca key storage + sync endpoint | ⬜ | — |
+| STORY-009 | Alpaca key storage + sync endpoint | ✅ | 2026-03-28 |
 | STORY-010 | Rebalance calculator (partial mode + session creation) | ⬜ | — |
 | STORY-010b | Rebalance calculator (full mode, pre-flight, cash injection) | ⬜ | — |
 | STORY-011 | Rebalancing wizard execute API route (Alpaca + manual) | ⬜ | — |
