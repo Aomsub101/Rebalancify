@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/encryption'
+import { buildBitkubSignature, parseBitkubTicker, parseBitkubWallet } from '@/lib/bitkub'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -86,7 +87,11 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
     )
   }
 
-  // For now only Alpaca is implemented in STORY-009
+  // Route to the correct broker sync handler
+  if (silo.platform_type === 'bitkub') {
+    return syncBitkub(supabase, user.id, silo_id)
+  }
+
   if (silo.platform_type !== 'alpaca') {
     return NextResponse.json(
       { error: { code: 'SYNC_NOT_IMPLEMENTED', message: `Sync not yet supported for ${silo.platform_type}` } },
@@ -244,5 +249,229 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
     holdings_updated: holdingsUpdated,
     cash_balance: account.cash,
     platform: 'alpaca',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// BITKUB sync — STORY-013
+// AC2: fetch wallet balances, upsert holdings
+// AC3: update price_cache from ticker (same API call batch, no extra request)
+// AC4: update last_synced_at
+// AC5: all BITKUB HTTP calls are server-side only (CLAUDE.md Rule 5)
+// AC6: 503 BROKER_UNAVAILABLE on network error
+// ---------------------------------------------------------------------------
+
+const BITKUB_BASE_URL = 'https://api.bitkub.com'
+
+interface BitkubTickerRaw {
+  [pair: string]: { last: number; [k: string]: unknown }
+}
+
+interface BitkubWalletRaw {
+  error: number
+  result: Record<string, number>
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClient = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
+
+async function syncBitkub(
+  supabase: SupabaseClient,
+  userId: string,
+  siloId: string,
+): Promise<NextResponse> {
+  const encKey = process.env.ENCRYPTION_KEY
+  if (!encKey) {
+    return NextResponse.json(
+      { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+      { status: 500 },
+    )
+  }
+
+  // 1. Fetch encrypted credentials
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('bitkub_key_enc, bitkub_secret_enc')
+    .eq('id', userId)
+    .single()
+
+  if (!profile?.bitkub_key_enc || !profile?.bitkub_secret_enc) {
+    return NextResponse.json(
+      { error: { code: 'BITKUB_NOT_CONNECTED', message: 'BITKUB API key not configured' } },
+      { status: 403 },
+    )
+  }
+
+  let bitkubKey: string
+  let bitkubSecret: string
+  try {
+    bitkubKey = decrypt(profile.bitkub_key_enc, encKey)
+    bitkubSecret = decrypt(profile.bitkub_secret_enc, encKey)
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'DECRYPTION_FAILED', message: 'Failed to decrypt BITKUB credentials' } },
+      { status: 500 },
+    )
+  }
+
+  // 2. Fetch ticker (public) + wallet (authenticated) in parallel — AC3 + AC2
+  const ts = Date.now()
+  const walletPayload = JSON.stringify({ ts })
+  const signature = buildBitkubSignature(walletPayload, bitkubSecret)
+
+  let tickerRaw: BitkubTickerRaw
+  let walletRaw: BitkubWalletRaw
+  try {
+    const [tickerRes, walletRes] = await Promise.all([
+      fetch(`${BITKUB_BASE_URL}/api/v2/market/ticker`, { cache: 'no-store' }),
+      fetch(`${BITKUB_BASE_URL}/api/v2/market/wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-BTK-APIKEY': bitkubKey,
+          'X-BTK-SIGN': signature,
+        },
+        body: walletPayload,
+        cache: 'no-store',
+      }),
+    ])
+
+    if (!tickerRes.ok || !walletRes.ok) {
+      throw new Error(`BITKUB returned ${tickerRes.status}/${walletRes.status}`)
+    }
+
+    tickerRaw = (await tickerRes.json()) as BitkubTickerRaw
+    walletRaw = (await walletRes.json()) as BitkubWalletRaw
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'BITKUB API is unreachable or returned an error' } },
+      { status: 503 },
+    )
+  }
+
+  if (walletRaw.error !== 0) {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: `BITKUB wallet error code ${walletRaw.error}` } },
+      { status: 503 },
+    )
+  }
+
+  // 3. Parse ticker and wallet
+  const tickerEntries = parseBitkubTicker(tickerRaw)
+  const [holdings, thbBalance] = parseBitkubWallet(walletRaw)
+
+  // Build a price lookup map: symbol → priceThb
+  const priceMap = new Map(tickerEntries.map((t) => [t.symbol, t.priceThb]))
+
+  const syncedAt = new Date().toISOString()
+  let holdingsUpdated = 0
+
+  // 4. Upsert each non-zero crypto holding
+  for (const h of holdings) {
+    // Find or create the asset record (unique on ticker + price_source)
+    const { data: existingAsset } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', h.symbol)
+      .eq('price_source', 'bitkub')
+      .maybeSingle()
+
+    let assetId: string
+    if (existingAsset) {
+      assetId = existingAsset.id
+    } else {
+      const { data: newAsset, error: assetErr } = await supabase
+        .from('assets')
+        .insert({
+          ticker: h.symbol,
+          name: h.symbol,
+          asset_type: 'crypto',
+          price_source: 'bitkub',
+        })
+        .select('id')
+        .single()
+
+      if (assetErr || !newAsset) continue
+      assetId = newAsset.id
+    }
+
+    // Ensure asset_mapping exists (best-effort, ignore conflict)
+    await supabase
+      .from('asset_mappings')
+      .upsert(
+        { silo_id: siloId, asset_id: assetId, local_label: h.symbol },
+        { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
+      )
+
+    // Upsert holding
+    const { error: holdingErr } = await supabase
+      .from('holdings')
+      .upsert(
+        {
+          silo_id: siloId,
+          asset_id: assetId,
+          quantity: h.quantity,
+          cash_balance: '0',
+          source: 'bitkub_sync',
+          last_updated_at: syncedAt,
+        },
+        { onConflict: 'silo_id,asset_id' },
+      )
+
+    if (!holdingErr) holdingsUpdated++
+
+    // AC3: update price_cache from ticker data (THB price)
+    const priceThb = priceMap.get(h.symbol)
+    if (priceThb) {
+      await supabase
+        .from('price_cache')
+        .upsert(
+          {
+            asset_id: assetId,
+            price: priceThb,
+            currency: 'THB',
+            fetched_at: syncedAt,
+            source: 'bitkub',
+          },
+          { onConflict: 'asset_id' },
+        )
+    }
+  }
+
+  // 5. Store THB cash balance: reset all to 0, then set on first holding
+  await supabase
+    .from('holdings')
+    .update({ cash_balance: '0' })
+    .eq('silo_id', siloId)
+
+  if (holdings.length > 0) {
+    const { data: firstAsset } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', holdings[0].symbol)
+      .eq('price_source', 'bitkub')
+      .maybeSingle()
+
+    if (firstAsset) {
+      await supabase
+        .from('holdings')
+        .update({ cash_balance: thbBalance })
+        .eq('silo_id', siloId)
+        .eq('asset_id', firstAsset.id)
+    }
+  }
+
+  // 6. AC4: update silo.last_synced_at
+  await supabase
+    .from('silos')
+    .update({ last_synced_at: syncedAt })
+    .eq('id', siloId)
+    .eq('user_id', userId)
+
+  return NextResponse.json({
+    synced_at: syncedAt,
+    holdings_updated: holdingsUpdated,
+    cash_balance: thbBalance,
+    platform: 'bitkub',
   })
 }

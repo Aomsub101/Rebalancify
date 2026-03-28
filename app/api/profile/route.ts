@@ -88,6 +88,22 @@ export async function PATCH(request: Request) {
     allowed.alpaca_mode = mode
   }
 
+  // BITKUB credentials — STORY-013 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
+  if ('bitkub_key' in body || 'bitkub_secret' in body) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    if ('bitkub_key' in body && typeof body.bitkub_key === 'string' && body.bitkub_key.length > 0) {
+      allowed.bitkub_key_enc = encrypt(body.bitkub_key, encKey)
+    }
+    if ('bitkub_secret' in body && typeof body.bitkub_secret === 'string' && body.bitkub_secret.length > 0) {
+      allowed.bitkub_secret_enc = encrypt(body.bitkub_secret, encKey)
+    }
+  }
+
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })
   }
