@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-04 — Broker Fetch
-**Active Story:** STORY-014b — InnovestX sync — digital asset branch + Settings UI
-**Last Completed:** STORY-014 — InnovestX sync — Settrade equity branch (2026-03-28)
+**Active Story:** STORY-015 — Schwab OAuth flow + token storage
+**Last Completed:** STORY-014b — InnovestX sync — digital asset branch + Settings UI (2026-03-28)
 
 Update this section manually as stories are completed. Format:
 ```

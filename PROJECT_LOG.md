@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-014b — InnovestX Digital Asset Branch & Settings UI
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `lib/innovestx.ts` — `buildInnovestxDigitalSignature` (HMAC-SHA256: timestamp+METHOD+path+body), `parseInnovestxDigitalBalances` (filters zero balances), digital API constants; 100% coverage
+- `lib/innovestx.test.ts` — 13 new TDD tests (Red→Green) covering signature correctness, method case-insensitivity, body inclusion, balance parsing, zero-filter, missing-key safety
+- `app/api/profile/route.ts` — PATCH extended with `innovestx_digital_key`/`innovestx_digital_secret` AES-256-GCM encryption (AC1)
+- `app/api/silos/[silo_id]/sync/route.ts` — `syncInnovestxEquity` renamed `syncInnovestx`; both equity + digital branches run independently; missing creds → `sync_warnings` not crash (AC3/AC5); CoinGecko prices for digital assets (AC4)
+- `app/(dashboard)/settings/page.tsx` — two InnovestX sections (Settrade Equity, Digital Asset) each with independent `ConnectionStatusDot` and password inputs with show/hide toggle (AC6)
+
+**Decisions made:**
+- HMAC message format: `timestamp + METHOD.toUpperCase() + path + body` — matches common InnovestX-style exchange patterns; easily adjustable once real docs confirmed with credentials
+- Digital asset base URL `https://api-digital.innovestxonline.com` is a best-effort assumption; credentials unavailable without contacting InnovestX support (documented in platform-support.md)
+- Both sync branches run in the same function call — equity and digital creds are independent; partial results use `sync_warnings` array (consistent with BITKUB pattern)
+
+**Discovered issues / carry-over notes:**
+- InnovestX Digital Asset API credentials require contacting InnovestX support directly — end-to-end test not possible until credentials obtained (story prerequisite documented)
+- Digital API base URL and endpoint path are assumptions; verify against `https://api-docs.innovestxonline.com/` when credentials arrive
+
+**Quality gates passed:** type-check ✅ | test ✅ (206 tests) | coverage ✅ (100% innovestx.ts) | build ✅ | security ✅
+
+---
+
 ### STORY-014 — InnovestX Sync — Settrade Equity Branch
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 3d — split into 014 + 014b)
