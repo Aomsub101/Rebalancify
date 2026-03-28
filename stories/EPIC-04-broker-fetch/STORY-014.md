@@ -6,6 +6,7 @@
 **Derived from:** F2-R7 (InnovestX platform — holdings fetch v1.0, dual-API architecture)
 **Connected to:** `docs/architecture/02-database-schema.md` (user_profiles innovestx_* columns, holdings, price_cache), `docs/architecture/03-api-contract.md` (profile PATCH, sync endpoint InnovestX branch), `docs/architecture/04-component-tree.md` (dual Settings sections)
 **Critical rules for agents using this file:**
+
 - Do not start implementation until all stories in the Dependencies section are marked ✅ in PROGRESS.md.
 - Do not exceed the scope of this story. If you discover additional work, create a new story.
 - Mark this story complete in PROGRESS.md only after every Definition of Done item is checked.
@@ -60,15 +61,18 @@ Both APIs must work for the InnovestX silo to display complete holdings. Each ha
 ## Technical Context
 
 **Database tables used:**
+
 - `user_profiles` — `innovestx_key_enc`, `innovestx_secret_enc`, `innovestx_digital_key_enc`, `innovestx_digital_secret_enc` — see `docs/architecture/02-database-schema.md`
 - `holdings` — upsert with `source = 'innovestx_sync'` — see schema doc
 - `price_cache` — upsert prices after sync — see schema doc
 
 **API endpoints implemented:**
+
 - `PATCH /api/profile` — extended for two InnovestX credential pairs — see `docs/architecture/03-api-contract.md`
 - `POST /api/silos/:id/sync` — InnovestX branch (dual-sub-account logic) — see API contract
 
 **External services:**
+
 - Settrade Open API — `get_portfolio(account_no)` — failure: skip equity branch, log warning
 - InnovestX Digital Asset API — proprietary balance endpoint — failure: skip digital branch, log warning
 - Finnhub `/quote` — Thai equity prices — failure: use stale `price_cache` if available
@@ -79,21 +83,13 @@ Both APIs must work for the InnovestX silo to display complete holdings. Each ha
 ## Implementation Tasks
 
 1. **Schema verification** — Confirm `user_profiles` has all four InnovestX encrypted columns (`innovestx_key_enc`, `innovestx_secret_enc`, `innovestx_digital_key_enc`, `innovestx_digital_secret_enc`). If running migrations from scratch, the STORY-001 migration already includes them. If patching an existing DB, write an additive migration.
-
 2. **Profile PATCH — equity credentials** — Extend `app/api/profile/route.ts` PATCH handler: if `innovestx_key` and/or `innovestx_secret` are present in the request body, encrypt and store them using the AES-256-GCM pattern from STORY-009.
-
 3. **Profile PATCH — digital asset credentials** — Same handler: if `innovestx_digital_key` and/or `innovestx_digital_secret` are present, encrypt and store them in the two new columns.
-
 4. **Profile GET — dual connection booleans** — Update `GET /api/profile` response to return `innovestx_equity_connected` and `innovestx_digital_connected` as separate booleans.
-
 5. **Sync route — Settrade equity branch** — In `app/api/silos/[silo_id]/sync/route.ts`, add the InnovestX equity branch: decrypt Settrade credentials → authenticate via OAuth Bearer → call `get_portfolio(account_no)` → upsert holdings.
-
 6. **Sync route — InnovestX digital asset branch** — Add the digital asset branch: decrypt digital asset credentials → build HMAC-SHA256 signature (`X-INVX-SIGNATURE`, `X-INVX-TIMESTAMP`, `X-INVX-REQUEST-UID`) → call balance endpoint → upsert holdings.
-
 7. **Price caching for both sub-accounts** — After each sync branch, invoke `priceService` for any asset whose price is stale: Finnhub for Thai equities, CoinGecko for digital assets.
-
 8. **Settings page — dual sections** — Add two distinct credential input sections to the Settings page InnovestX card: one for Settrade equity (App ID + App Secret), one for Digital Asset (Key + Secret). Each with masked `type="password"` inputs, show/hide toggle, and independent connection status badge.
-
 9. **Security test** — Network inspection must show zero requests from the browser to `settrade.com` or `innovestxonline.com` endpoints.
 
 ---
