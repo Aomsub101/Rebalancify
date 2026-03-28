@@ -77,19 +77,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     )
   }
 
-  // Full mode deferred to STORY-010b
-  if (mode === 'full') {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'NOT_IMPLEMENTED',
-          message: 'Full mode is not yet available — coming in a future release',
-        },
-      },
-      { status: 422 },
-    )
-  }
-
   // -------------------------------------------------------------------------
   // Verify silo ownership (RLS double-check)
   // -------------------------------------------------------------------------
@@ -190,6 +177,26 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     include_cash,
     cash_amount,
   })
+
+  // -------------------------------------------------------------------------
+  // Pre-flight: full mode — return 422 without creating DB records (AC2)
+  // -------------------------------------------------------------------------
+
+  if (!result.balance_valid) {
+    return NextResponse.json(
+      {
+        session_id: null,
+        mode,
+        balance_valid: false,
+        balance_errors: result.balance_errors,
+        weights_sum_pct: result.weights_sum_pct,
+        cash_target_pct: result.cash_target_pct,
+        snapshot_before: result.snapshot_before,
+        orders: result.orders,
+      },
+      { status: 422 },
+    )
+  }
 
   // -------------------------------------------------------------------------
   // Persist rebalance_sessions (immutable — no updated_at, CLAUDE.md Rule 9)

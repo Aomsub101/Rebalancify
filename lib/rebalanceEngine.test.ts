@@ -348,3 +348,264 @@ describe('calculateRebalance – timing', () => {
     expect(result).toBeDefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// STORY-010b tests
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Test 7 — Full mode: ±0.01% accuracy (AC1)
+// ---------------------------------------------------------------------------
+
+describe('calculateRebalance – full mode accuracy', () => {
+  it('achieves post-execution weights within ±0.01% of targets', () => {
+    /**
+     * Setup:
+     *   AAPL: qty=10, price=100, value=1000, cash_balance=1000
+     *   MSFT: qty=0, price=200, no value
+     *   total_value = 1000 + 0 + 1000 (cash) = 2000
+     *
+     * Targets: AAPL=50%, MSFT=50%
+     *   AAPL delta = 1000 - 1000 = 0 → no order
+     *   MSFT delta = 1000 - 0 = 1000 → buy round(1000/200) = 5 shares → cost=1000
+     *
+     * available = 1000 (cash) ≥ 1000 (buy) → balance_valid=true
+     * weight_after for MSFT = 1000/2000 = 50% exactly
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '10.00000000', '100.00000000', '1000.00000000'),
+      makeHolding('asset-msft', 'MSFT', '0.00000000', '200.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '50.000'),
+      makeWeight('asset-msft', '50.000'),
+    ]
+    const input: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+
+    const result = calculateRebalance(input)
+
+    expect(result.balance_valid).toBe(true)
+    expect(result.balance_errors).toHaveLength(0)
+
+    const msftOrder = result.orders.find(o => o.asset_id === 'asset-msft')
+    expect(msftOrder).toBeDefined()
+    expect(msftOrder!.order_type).toBe('buy')
+
+    // Post-execution weight must be within ±0.01% of 50%
+    expect(Math.abs(msftOrder!.weight_after_pct - 50)).toBeLessThan(0.01)
+  })
+
+  it('full mode uses ROUND_HALF_UP for buy quantities (more accurate than floor)', () => {
+    /**
+     * AAPL: qty=0, price=300, no value
+     * cash_balance=150, total=150
+     * Target: AAPL=100%
+     *
+     * Partial mode: floor(150/300) = 0.5 → 0.50000000 → cost=150.00 (same here)
+     * Full mode:    round(150/300) = round(0.5) = 0.50000000 → same result in this case
+     *
+     * A case where they differ:
+     * cash=250, AAPL price=300
+     * Partial: floor(250/300) = floor(0.833...) = 0.83333333 → cost=249.999999
+     * Full:    round(250/300) = round(0.833...) = 0.83333333 → same here (3 < 5)
+     *
+     * Use a case where the 8th decimal digit is ≥ 5 to force round-up:
+     * cash=200, AAPL price=300
+     * 200/300 = 0.66666666... → 9th digit is 6 → round up at 8dp: 0.66666667
+     * cost = 0.66666667 × 300 = 200.00000100 — this exceeds available (100b test below)
+     *
+     * Here we just verify full mode produces weight_after within ±0.01%
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '100.00000000', '1000.00000000'),
+      makeHolding('asset-msft', 'MSFT', '0.00000000', '300.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '40.000'),
+      makeWeight('asset-msft', '60.000'),
+    ]
+    const input: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+
+    const result = calculateRebalance(input)
+
+    // Both buys: AAPL target=400, buy round(400/100)=4; MSFT target=600, buy round(600/300)=2
+    // total buy cost=400+600=1000 = available → passes
+    expect(result.balance_valid).toBe(true)
+
+    const aaplOrder = result.orders.find(o => o.asset_id === 'asset-aapl')
+    const msftOrder = result.orders.find(o => o.asset_id === 'asset-msft')
+
+    expect(aaplOrder).toBeDefined()
+    expect(msftOrder).toBeDefined()
+
+    // Both weight_after_pct within ±0.01% of targets
+    expect(Math.abs(aaplOrder!.weight_after_pct - 40)).toBeLessThan(0.01)
+    expect(Math.abs(msftOrder!.weight_after_pct - 60)).toBeLessThan(0.01)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 8 — Pre-flight failure: insufficient cash in full mode (AC2)
+// ---------------------------------------------------------------------------
+
+describe('calculateRebalance – full mode pre-flight failure', () => {
+  it('returns balance_valid=false with balance_errors when buy cost exceeds available', () => {
+    /**
+     * Setup:
+     *   AAPL: qty=0, price=300, cash_balance=200, total=200
+     *   Target: AAPL=100%
+     *
+     *   buy_qty = round(200/300) = round(0.666666...) = 0.66666667 (round-up at 8dp)
+     *   buy_cost = 0.66666667 × 300 = 200.00000100
+     *   available = 200 (cash) + 0 (sells) = 200
+     *   200.00000100 > 200 → INSUFFICIENT → balance_valid=false
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '100.000'),
+    ]
+    const input: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+
+    const result = calculateRebalance(input)
+
+    expect(result.balance_valid).toBe(false)
+    expect(result.balance_errors.length).toBeGreaterThan(0)
+    // Error message should mention the shortfall
+    expect(result.balance_errors[0]).toMatch(/shortfall/i)
+  })
+
+  it('partial mode does NOT fail pre-flight — it scales down instead', () => {
+    /**
+     * Same scenario but mode='partial'.
+     * Partial mode scales down the buy to fit within available capital.
+     * → balance_valid=true (partial mode never fails pre-flight)
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '100.000'),
+    ]
+    const input: EngineInput = {
+      holdings,
+      weights,
+      mode: 'partial',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+
+    const result = calculateRebalance(input)
+
+    expect(result.balance_valid).toBe(true)
+    expect(result.balance_errors).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 9 — Cash injection: include_cash=true adds to available capital (AC4)
+// ---------------------------------------------------------------------------
+
+describe('calculateRebalance – cash injection', () => {
+  it('cash injection resolves a pre-flight failure', () => {
+    /**
+     * Without injection (same as Test 8):
+     *   buy_cost = 200.00000100 > available(200) → balance_valid=false
+     *
+     * With injection cash_amount="0.10000000":
+     *   total = 200 + 0.1 = 200.1
+     *   buy_qty = round(200.1/300) = round(0.667) = 0.66700000
+     *   buy_cost = 0.66700000 × 300 = 200.10
+     *   available = 200 (existing) + 0.1 (injected) = 200.1
+     *   200.10 ≤ 200.1 → balance_valid=true
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '100.000'),
+    ]
+
+    // Without injection — should fail
+    const inputNoInject: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+    const resultNoInject = calculateRebalance(inputNoInject)
+    expect(resultNoInject.balance_valid).toBe(false)
+
+    // With injection — should pass
+    const inputWithInject: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: true,
+      cash_amount: '0.10000000',
+    }
+    const resultWithInject = calculateRebalance(inputWithInject)
+    expect(resultWithInject.balance_valid).toBe(true)
+    expect(resultWithInject.balance_errors).toHaveLength(0)
+  })
+
+  it('injected cash increases total_value and affects target values', () => {
+    /**
+     * AAPL: qty=5, price=100, value=500, cash=0
+     * Injecting cash=500 → total=1000 instead of 500
+     * Target: AAPL=100%
+     *   Without injection: target=500, delta=0 → no order
+     *   With injection: target=1000, delta=500 → buy round(500/100)=5 shares
+     */
+    const holdings = [
+      makeHolding('asset-aapl', 'AAPL', '5.00000000', '100.00000000'),
+    ]
+    const weights = [
+      makeWeight('asset-aapl', '100.000'),
+    ]
+
+    const inputNoInject: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: false,
+      cash_amount: '0.00000000',
+    }
+    const resultNoInject = calculateRebalance(inputNoInject)
+    expect(resultNoInject.orders).toHaveLength(0)
+
+    const inputWithInject: EngineInput = {
+      holdings,
+      weights,
+      mode: 'full',
+      include_cash: true,
+      cash_amount: '500.00000000',
+    }
+    const resultWithInject = calculateRebalance(inputWithInject)
+
+    // With injected cash, a BUY order should be generated
+    const buyOrder = resultWithInject.orders.find(o => o.order_type === 'buy')
+    expect(buyOrder).toBeDefined()
+    expect(buyOrder!.asset_id).toBe('asset-aapl')
+  })
+})

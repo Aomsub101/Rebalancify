@@ -107,9 +107,14 @@ function ceilAt8(d: Decimal): Decimal {
   return d.toDecimalPlaces(8, Decimal.ROUND_UP)
 }
 
-/** Round to 8 decimal places, floor (for buy quantities). */
+/** Round to 8 decimal places, floor (for buy quantities in partial mode). */
 function floorAt8(d: Decimal): Decimal {
   return d.toDecimalPlaces(8, Decimal.ROUND_DOWN)
+}
+
+/** Round to 8 decimal places, half-up (for buy quantities in full mode — ±0.01% accuracy). */
+function roundAt8(d: Decimal): Decimal {
+  return d.toDecimalPlaces(8, Decimal.ROUND_HALF_UP)
 }
 
 /** Format a Decimal to NUMERIC(20,8) string. */
@@ -134,11 +139,6 @@ function toPct3(d: Decimal): number {
  */
 export function calculateRebalance(input: EngineInput): EngineResult {
   const { holdings, weights, mode, include_cash, cash_amount } = input
-
-  if (mode === 'full') {
-    // Full mode implemented in STORY-010b
-    throw new Error('Full mode not yet implemented — see STORY-010b')
-  }
 
   // -------------------------------------------------------------------------
   // Build lookup maps
@@ -265,7 +265,11 @@ export function calculateRebalance(input: EngineInput): EngineResult {
       }
     } else if (delta.gt('0.00000001')) {
       // Underweight → BUY
-      const buyQty = floorAt8(delta.div(price))
+      // Partial mode: floor (conservative — never overspend)
+      // Full mode: round half-up (closest to target — achieves ±0.01% accuracy)
+      const buyQty = mode === 'full'
+        ? roundAt8(delta.div(price))
+        : floorAt8(delta.div(price))
       if (buyQty.gt(0)) {
         rawBuys.push({ asset_id: assetId, ticker, order_type: 'buy', quantity: buyQty, price, current_value: currentValue })
       }
@@ -283,26 +287,37 @@ export function calculateRebalance(input: EngineInput): EngineResult {
   )
   const available = existingCash.plus(injectedCash).plus(sellProceeds)
 
-  let totalBuyCost = rawBuys.reduce(
+  const totalBuyCost = rawBuys.reduce(
     (sum, o) => sum.plus(o.quantity.mul(o.price)),
     new Decimal(0)
   )
 
-  // Scale down all buys proportionally if we can't afford them
-  if (totalBuyCost.gt(available) && !available.isZero()) {
-    const scaleFactor = available.div(totalBuyCost)
-    for (const buy of rawBuys) {
-      buy.quantity = floorAt8(buy.quantity.mul(scaleFactor))
+  // Pre-flight balance check — behaviour differs by mode:
+  //   Partial: scale down buys to fit available capital (always balance_valid=true)
+  //   Full:    if buy cost exceeds available, mark balance_valid=false (pre-flight 422)
+  let balanceValid = true
+  let balanceErrors: string[] = []
+
+  if (mode === 'partial') {
+    if (totalBuyCost.gt(available) && !available.isZero()) {
+      const scaleFactor = available.div(totalBuyCost)
+      for (const buy of rawBuys) {
+        buy.quantity = floorAt8(buy.quantity.mul(scaleFactor))
+      }
+    } else if (totalBuyCost.gt(available) && available.isZero()) {
+      // No capital at all → zero all buys
+      for (const buy of rawBuys) {
+        buy.quantity = new Decimal(0)
+      }
     }
-    // Recompute after scale
-    totalBuyCost = rawBuys.reduce(
-      (sum, o) => sum.plus(o.quantity.mul(o.price)),
-      new Decimal(0)
-    )
-  } else if (totalBuyCost.gt(available) && available.isZero()) {
-    // No capital at all → zero all buys
-    for (const buy of rawBuys) {
-      buy.quantity = new Decimal(0)
+  } else {
+    // Full mode: pre-flight — refuse if capital is insufficient
+    if (totalBuyCost.gt(available)) {
+      const shortfall = totalBuyCost.minus(available)
+      balanceValid = false
+      balanceErrors = [
+        `Insufficient capital: need ${toFixed8(totalBuyCost)}, have ${toFixed8(available)} (shortfall: ${toFixed8(shortfall)})`,
+      ]
     }
   }
 
@@ -366,8 +381,8 @@ export function calculateRebalance(input: EngineInput): EngineResult {
 
   return {
     orders: finalOrders,
-    balance_valid: true,           // Pre-flight validation in STORY-010b
-    balance_errors: [],            // Pre-flight validation in STORY-010b
+    balance_valid: balanceValid,
+    balance_errors: balanceErrors,
     weights_sum_pct: toPct3(weightsSumPct),
     cash_target_pct: toPct3(cashTargetPct),
     snapshot_before: snapshot,

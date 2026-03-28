@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-010b — Rebalance calculator (full mode, pre-flight, cash injection)
+**Completed:** 2026-03-28
+**Effort:** 0.25 day (estimated 2d)
+
+**What was built:**
+- `lib/rebalanceEngine.ts` — full mode path: `roundAt8` (ROUND_HALF_UP) for buy quantities; pre-flight balance check sets `balance_valid=false` + `balance_errors` when `totalBuyCost > available`; partial mode scale-down logic unchanged
+- `lib/rebalanceEngine.test.ts` — 6 new TDD tests: full-mode ±0.01% accuracy (×2), pre-flight failure, partial vs full mode contrast, cash injection resolves failure, injected cash increases total_value
+- `app/api/silos/[silo_id]/rebalance/calculate/route.ts` — removed NOT_IMPLEMENTED block; returns HTTP 422 without creating DB records when `result.balance_valid === false`
+
+**Decisions made:**
+- `roundAt8` (ROUND_HALF_UP) achieves ±0.01% accuracy at 8dp — max rounding error is 0.5e-8 shares × price / totalValue (negligible)
+- Pre-flight failure returns orders in 422 body so UI can show "what you'd need"; no session is created
+- Partial mode always stays `balance_valid=true` (scale-down path preserved)
+
+**Discovered issues / carry-over notes:**
+- Pre-flight test case relies on ROUND_HALF_UP rounding 0.6666... to 0.66666667 which costs 200.000001 > 200 — this is the canonical full-mode failure example in tests
+- STORY-011 can now call full mode; pre-flight 422 response shape is `{ session_id: null, mode, balance_valid, balance_errors, orders, ... }`
+
+**Quality gates passed:** type-check ✅ | test ✅ (139/139) | build ✅ | RLS ✅
+
+---
+
 ### STORY-010 — Rebalance calculator (partial mode + session creation)
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 3d — scoped to partial mode only; full mode deferred to STORY-010b)
