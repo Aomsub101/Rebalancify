@@ -39,6 +39,29 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-010 — Rebalance calculator (partial mode + session creation)
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 3d — scoped to partial mode only; full mode deferred to STORY-010b)
+
+**What was built:**
+- `lib/rebalanceEngine.ts` — pure deterministic calculation engine; partial mode only; no DB/side effects
+  - Sells: `ceil(|delta|/price)` capped at holding qty; Buys: `floor(delta/price)`; scales buys down if cash insufficient
+  - Builds `snapshot_before` (holdings/prices/weights/total_value) for session immutability
+- `lib/rebalanceEngine.test.ts` — 7 TDD unit tests: no-overspend, scale-down, empty orders, silo isolation, weights≠100, snapshot shape, 50-holding timing
+- `app/api/silos/[silo_id]/rebalance/calculate/route.ts` — POST handler: fetches holdings+prices+weights, calls engine, inserts `rebalance_sessions` (pending, no `updated_at`) + `rebalance_orders`
+
+**Decisions made:**
+- Engine is a pure function (no DB) — makes it trivially unit-testable without mocking Supabase
+- Full mode returns 422 NOT_IMPLEMENTED until STORY-010b — keeps partial mode clean and avoids dead code paths
+- `cash_amount` accepted in request body and threaded through engine now; cash injection unit tests are in STORY-010b per split agreement
+
+**Discovered issues / carry-over notes:**
+- STORY-010b must implement: full mode (±0.01% accuracy), pre-flight 422 `BALANCE_INSUFFICIENT`, cash injection tests, and the remaining ACs (AC3, AC4, AC6)
+
+**Quality gates passed:** type-check ✅ | test ✅ (133/133) | build ✅ | RLS ✅
+
+---
+
 ### STORY-009 — Alpaca key storage + sync endpoint
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
