@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AlpacaLiveBadge } from '@/components/shared/AlpacaLiveBadge'
 
 export interface SiloCardData {
   id: string
@@ -57,15 +57,7 @@ export function SiloCard({ silo }: SiloCardProps) {
         <div className="flex items-center gap-2 min-w-0">
           <h3 className="text-base font-medium text-foreground truncate">{silo.name}</h3>
           {/* CLAUDE.md Rule 15: LIVE badge is always visible for Alpaca live mode */}
-          {isAlpacaLive && (
-            <span
-              className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide bg-warning-bg text-warning"
-              aria-label="Live trading mode active"
-            >
-              <AlertCircle className="h-3 w-3" aria-hidden="true" />
-              LIVE
-            </span>
-          )}
+          {isAlpacaLive && <AlpacaLiveBadge />}
         </div>
         <span
           className={cn(

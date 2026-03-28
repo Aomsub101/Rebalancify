@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildProfileResponse } from '@/lib/profile'
+import { encrypt } from '@/lib/encryption'
 
 export async function GET() {
   const supabase = await createClient()
@@ -44,8 +45,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: { code: 'INVALID_JSON', message: 'Invalid request body' } }, { status: 400 })
   }
 
-  // Only allow safe, non-key fields to be updated via this endpoint in STORY-005 scope.
-  // API key fields (alpaca_key, bitkub_key, etc.) are handled in EPIC-03/04 stories.
   const allowed: Record<string, unknown> = {}
   if ('display_name' in body) allowed.display_name = body.display_name
   if ('show_usd_toggle' in body) allowed.show_usd_toggle = body.show_usd_toggle
@@ -61,6 +60,33 @@ export async function PATCH(request: Request) {
   }
   if ('onboarded' in body) allowed.onboarded = body.onboarded
   if ('progress_banner_dismissed' in body) allowed.progress_banner_dismissed = body.progress_banner_dismissed
+
+  // Alpaca credentials — STORY-009 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
+  const encKey = process.env.ENCRYPTION_KEY
+  if ('alpaca_key' in body || 'alpaca_secret' in body) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    if ('alpaca_key' in body && typeof body.alpaca_key === 'string' && body.alpaca_key.length > 0) {
+      allowed.alpaca_key_enc = encrypt(body.alpaca_key, encKey)
+    }
+    if ('alpaca_secret' in body && typeof body.alpaca_secret === 'string' && body.alpaca_secret.length > 0) {
+      allowed.alpaca_secret_enc = encrypt(body.alpaca_secret, encKey)
+    }
+  }
+  if ('alpaca_mode' in body) {
+    const mode = body.alpaca_mode
+    if (mode !== 'paper' && mode !== 'live') {
+      return NextResponse.json(
+        { error: { code: 'INVALID_VALUE', message: 'alpaca_mode must be paper | live' } },
+        { status: 400 },
+      )
+    }
+    allowed.alpaca_mode = mode
+  }
 
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })

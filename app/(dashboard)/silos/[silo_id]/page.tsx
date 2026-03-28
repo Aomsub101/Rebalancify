@@ -29,15 +29,27 @@ export default async function SiloDetailPage({ params }: Props) {
   } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: silo } = await supabase
-    .from('silos')
-    .select('id, name, platform_type, base_currency, drift_threshold')
-    .eq('id', silo_id)
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .single()
+  const [siloResult, profileResult] = await Promise.all([
+    supabase
+      .from('silos')
+      .select('id, name, platform_type, base_currency, drift_threshold, last_synced_at')
+      .eq('id', silo_id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .single(),
+    supabase
+      .from('user_profiles')
+      .select('alpaca_mode')
+      .eq('id', user.id)
+      .single(),
+  ])
 
-  if (!silo) redirect('/silos')
+  if (!siloResult.data) redirect('/silos')
+
+  const silo = {
+    ...siloResult.data,
+    alpaca_mode: profileResult.data?.alpaca_mode ?? 'paper',
+  }
 
   return <SiloDetailView silo={silo} />
 }

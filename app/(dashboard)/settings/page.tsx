@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ProfileData {
@@ -12,6 +12,8 @@ interface ProfileData {
   drift_notif_channel: string
   active_silo_count: number
   silo_limit: number
+  alpaca_connected: boolean
+  alpaca_mode: string
 }
 
 async function fetchProfile(): Promise<ProfileData> {
@@ -42,10 +44,22 @@ export default function SettingsPage() {
   const [isSavingNotif, setIsSavingNotif] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Alpaca state
+  const [alpacaKey, setAlpacaKey] = useState('')
+  const [alpacaSecret, setAlpacaSecret] = useState('')
+  const [alpacaMode, setAlpacaMode] = useState<'paper' | 'live'>('paper')
+  const [showAlpacaKey, setShowAlpacaKey] = useState(false)
+  const [showAlpacaSecret, setShowAlpacaSecret] = useState(false)
+  const [isSavingAlpaca, setIsSavingAlpaca] = useState(false)
+  const [alpacaSaved, setAlpacaSaved] = useState(false)
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? '')
       setNotifChannel((profile.drift_notif_channel as NotifChannel) ?? 'both')
+      setAlpacaMode((profile.alpaca_mode as 'paper' | 'live') ?? 'paper')
+      // After load, reset input fields — saved keys are masked as ••••••••
+      setAlpacaSaved(profile.alpaca_connected)
     }
   }, [profile])
 
@@ -85,6 +99,30 @@ export default function SettingsPage() {
       setSaveError(err instanceof Error ? err.message : 'Failed to save notification preference.')
     } finally {
       setIsSavingNotif(false)
+    }
+  }
+
+  async function handleSaveAlpaca() {
+    setSaveError(null)
+    setIsSavingAlpaca(true)
+    try {
+      const fields: Record<string, unknown> = { alpaca_mode: alpacaMode }
+      // Only include key/secret if the user typed something new
+      if (alpacaKey.trim()) fields.alpaca_key = alpacaKey.trim()
+      if (alpacaSecret.trim()) fields.alpaca_secret = alpacaSecret.trim()
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      // Clear plaintext inputs after save — CLAUDE.md Rule 16
+      setAlpacaKey('')
+      setAlpacaSecret('')
+      setShowAlpacaKey(false)
+      setShowAlpacaSecret(false)
+      setAlpacaSaved(true)
+      toast.success('Alpaca settings saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save Alpaca settings.')
+    } finally {
+      setIsSavingAlpaca(false)
     }
   }
 
@@ -213,6 +251,146 @@ export default function SettingsPage() {
             )}
           >
             {isSavingNotif ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
+      {/* Alpaca section — AC2, AC3 */}
+      <section aria-labelledby="alpaca-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="alpaca-heading" className="text-xl font-medium text-foreground">Alpaca</h2>
+          {/* ConnectionStatusDot — AC2 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {profile?.alpaca_connected || alpacaSaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* API Key input — CLAUDE.md Rule 16: type="password" with show/hide */}
+          <div>
+            <label htmlFor="alpaca-key" className="block text-sm font-medium text-foreground mb-1.5">
+              API Key ID
+            </label>
+            <div className="relative">
+              <input
+                id="alpaca-key"
+                type={showAlpacaKey ? 'text' : 'password'}
+                value={alpacaKey}
+                onChange={(e) => setAlpacaKey(e.target.value)}
+                placeholder={alpacaSaved ? '••••••••' : 'Paste your Alpaca API Key ID'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAlpacaKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showAlpacaKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showAlpacaKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* API Secret input */}
+          <div>
+            <label htmlFor="alpaca-secret" className="block text-sm font-medium text-foreground mb-1.5">
+              API Secret Key
+            </label>
+            <div className="relative">
+              <input
+                id="alpaca-secret"
+                type={showAlpacaSecret ? 'text' : 'password'}
+                value={alpacaSecret}
+                onChange={(e) => setAlpacaSecret(e.target.value)}
+                placeholder={alpacaSaved ? '••••••••' : 'Paste your Alpaca Secret Key'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAlpacaSecret(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showAlpacaSecret ? 'Hide secret key' : 'Show secret key'}
+              >
+                {showAlpacaSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mode selector — AC3 */}
+          <div>
+            <p className="block text-sm font-medium text-foreground mb-2">Trading mode</p>
+            <div className="flex gap-3">
+              {(['paper', 'live'] as const).map((mode) => (
+                <label
+                  key={mode}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer text-sm transition-colors',
+                    'outline-none focus-within:ring-2 focus-within:ring-ring',
+                    alpacaMode === mode
+                      ? mode === 'live'
+                        ? 'border-warning bg-warning-bg text-warning'
+                        : 'border-primary bg-primary/5 text-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/40',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="alpaca_mode"
+                    value={mode}
+                    checked={alpacaMode === mode}
+                    onChange={() => setAlpacaMode(mode)}
+                    className="accent-primary outline-none"
+                  />
+                  <span className="capitalize font-medium">{mode}</span>
+                  {mode === 'live' && (
+                    <span className="text-[10px] font-mono uppercase tracking-wide text-warning">
+                      Real money
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+            {alpacaMode === 'live' && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-warning">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Live mode executes real trades with real funds. Use with caution.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveAlpaca}
+            disabled={isSavingAlpaca}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingAlpaca ? 'Saving…' : 'Save'}
           </button>
         </div>
       </section>

@@ -34,6 +34,14 @@ function siloListChain(silos: unknown[]) {
   return { select: vi.fn().mockReturnValue(chain1) }
 }
 
+/** Build a chain for user_profiles: .select().eq().single() → data */
+function profileSingleChain(data: unknown) {
+  const resolved = Promise.resolve({ data, error: null })
+  const chain2 = { single: vi.fn().mockReturnValue(resolved) }
+  const chain1 = { eq: vi.fn().mockReturnValue(chain2) }
+  return { select: vi.fn().mockReturnValue(chain1) }
+}
+
 /** Count chain for the post-insert re-count: .select().eq().eq() → count */
 const limitCountChain = (count: number) => limitCheckChain(count)
 
@@ -84,7 +92,10 @@ describe('GET /api/silos', () => {
 
   it('returns 200 with empty array when user has no active silos', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
-    mockFromImpl = () => siloListChain([])
+    mockFromImpl = (table: string) =>
+      table === 'user_profiles'
+        ? profileSingleChain({ alpaca_mode: 'paper' })
+        : siloListChain([])
     const res = await GET()
     expect(res.status).toBe(200)
     const body = await res.json()

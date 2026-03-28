@@ -12,19 +12,28 @@ export async function GET() {
     return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } }, { status: 401 })
   }
 
-  const { data: silos, error } = await supabase
-    .from('silos')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
+  const [silosResult, profileResult] = await Promise.all([
+    supabase
+      .from('silos')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('user_profiles')
+      .select('alpaca_mode')
+      .eq('id', user.id)
+      .single(),
+  ])
 
-  if (error) {
-    return NextResponse.json({ error: { code: 'FETCH_FAILED', message: error.message } }, { status: 500 })
+  if (silosResult.error) {
+    return NextResponse.json({ error: { code: 'FETCH_FAILED', message: silosResult.error.message } }, { status: 500 })
   }
 
-  const activeSiloCount = silos?.length ?? 0
-  const response = (silos ?? []).map((silo) => buildSiloResponse(silo, activeSiloCount, 5))
+  const silos = silosResult.data ?? []
+  const alpacaMode = profileResult.data?.alpaca_mode ?? 'paper'
+  const activeSiloCount = silos.length
+  const response = silos.map((silo) => buildSiloResponse(silo, activeSiloCount, 5, alpacaMode))
 
   return NextResponse.json(response)
 }

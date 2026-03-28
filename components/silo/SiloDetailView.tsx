@@ -21,6 +21,8 @@ interface SiloData {
   platform_type: string
   base_currency: 'USD' | 'THB'
   drift_threshold: number
+  alpaca_mode?: string
+  last_synced_at?: string | null
 }
 
 interface Props {

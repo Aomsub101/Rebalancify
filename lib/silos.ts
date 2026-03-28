@@ -43,6 +43,7 @@ export interface SiloResponse {
   cash_target_pct: number
   active_silo_count: number
   silo_limit: number
+  alpaca_mode?: string
 }
 
 /**
@@ -67,13 +68,15 @@ export async function checkSiloLimit(
  * Maps a silos DB row to the API response shape.
  * total_value is "0.00000000" until holdings are added (STORY-005 scope).
  * weights_sum_pct and cash_target_pct default to 0 / 100 until target weights are set.
+ * alpaca_mode is only included for Alpaca-type silos; sourced from user_profiles.
  */
 export function buildSiloResponse(
   row: SiloRow,
   activeSiloCount: number,
   siloLimit: number,
+  alpacaMode?: string,
 ): SiloResponse {
-  return {
+  const response: SiloResponse = {
     id: row.id,
     name: row.name,
     platform_type: row.platform_type,
@@ -87,4 +90,8 @@ export function buildSiloResponse(
     active_silo_count: activeSiloCount,
     silo_limit: siloLimit,
   }
+  if (row.platform_type === 'alpaca' && alpacaMode !== undefined) {
+    response.alpaca_mode = alpacaMode
+  }
+  return response
 }
