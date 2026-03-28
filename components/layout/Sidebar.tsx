@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Home,
@@ -12,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/contexts/SessionContext'
+import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { cn } from '@/lib/utils'
 
 async function fetchProfile() {
@@ -38,6 +38,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { profile: sessionProfile, session } = useSession()
+  const { isDirty, confirmNavigation } = useDirtyState()
 
   // AC #11: useQuery so silo count updates reactively after create/delete invalidations
   const { data: profileData } = useQuery({
@@ -54,6 +55,12 @@ export function Sidebar() {
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  function handleNavClick(href: string) {
+    if (pathname.startsWith(href)) return  // already on this page
+    if (!confirmNavigation()) return       // user cancelled (AC9)
+    router.push(href)
   }
 
   const initials = displayName
@@ -89,19 +96,24 @@ export function Sidebar() {
       <nav className="flex-1 flex flex-col gap-1 p-2 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname.startsWith(item.href)
+          // AC9: amber highlight when dirty and this is the Silos nav item
+          const isDirtyIndicator = isDirty && item.href === '/silos'
           const Icon = item.icon
 
           return (
-            <Link
+            <button
               key={item.href}
-              href={item.href}
+              onClick={() => handleNavClick(item.href)}
               className={cn(
-                'flex items-center gap-3 px-2 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-3 px-2 py-2 rounded-md text-sm transition-colors w-full text-left',
                 'outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-ring)]',
-                isActive
-                  ? 'bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)]'
-                  : 'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]',
+                isDirtyIndicator
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : isActive
+                    ? 'bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)]'
+                    : 'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]',
               )}
+              aria-current={isActive ? 'page' : undefined}
             >
               <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
               <span className="hidden lg:flex lg:items-center lg:gap-2 truncate">
@@ -114,8 +126,14 @@ export function Sidebar() {
                     [{siloCount}/5]
                   </span>
                 )}
+                {/* AC9: text indicator for dirty state alongside the colour signal (Rule 13) */}
+                {isDirtyIndicator && (
+                  <span className="text-[10px] font-mono text-amber-400" aria-label="Unsaved changes">
+                    unsaved
+                  </span>
+                )}
               </span>
-            </Link>
+            </button>
           )
         })}
       </nav>

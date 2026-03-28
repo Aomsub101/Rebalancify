@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import Decimal from 'decimal.js'
 import { DriftBadge } from '@/components/shared/DriftBadge'
 import { StalenessTag } from '@/components/shared/StalenessTag'
+import { TargetWeightCell } from '@/components/silo/TargetWeightCell'
 import { formatNumber } from '@/lib/formatNumber'
 import type { Holding } from '@/lib/types/holdings'
 
@@ -15,9 +16,20 @@ interface Props {
   driftThreshold: number
   isManual: boolean
   baseCurrency: string
+  /** Local (unsaved) target weight value driven by SiloDetailView state (AC5). */
+  localTargetWeight: string
+  onWeightChange: (assetId: string, value: string) => void
 }
 
-export function HoldingRow({ holding, siloId, driftThreshold, isManual, baseCurrency }: Props) {
+export function HoldingRow({
+  holding,
+  siloId,
+  driftThreshold,
+  isManual,
+  baseCurrency,
+  localTargetWeight,
+  onWeightChange,
+}: Props) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(holding.quantity)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -113,9 +125,14 @@ export function HoldingRow({ holding, siloId, driftThreshold, isManual, baseCurr
       <td className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
         {formatNumber(holding.current_weight_pct, 'weight')}
       </td>
-      {/* Target weight */}
-      <td className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
-        {formatNumber(holding.target_weight_pct, 'weight')}
+      {/* Target weight — inline editable for ALL silo types (AC5) */}
+      <td className="px-4 py-3 text-right font-mono text-sm tabular-nums">
+        <TargetWeightCell
+          assetId={holding.asset_id}
+          ticker={holding.ticker}
+          localValue={localTargetWeight}
+          onWeightChange={onWeightChange}
+        />
       </td>
       {/* Drift */}
       <td className="px-4 py-3 text-right">

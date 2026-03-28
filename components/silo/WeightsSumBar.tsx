@@ -1,20 +1,20 @@
-import { AlertCircle } from 'lucide-react'
+import { WeightsSumWarning } from '@/components/silo/WeightsSumWarning'
 import { formatNumber } from '@/lib/formatNumber'
 
 interface HoldingSlice {
   ticker: string
   current_weight_pct: number
-  target_weight_pct: number
 }
 
 interface Props {
   holdings: HoldingSlice[]
+  /** Live sum of target weights driven by local state in SiloDetailView (AC5). */
+  weightsSumPct: number
 }
 
-export function WeightsSumBar({ holdings }: Props) {
-  const weightsSumPct = holdings.reduce((sum, h) => sum + h.target_weight_pct, 0)
-  const sumWarning = Math.abs(weightsSumPct - 100) > 0.001 && holdings.length > 0
+export function WeightsSumBar({ holdings, weightsSumPct }: Props) {
   const cashTargetPct = Math.max(0, 100 - weightsSumPct)
+  const sumWarning = holdings.length > 0 && Math.abs(weightsSumPct - 100) > 0.001
 
   return (
     <div className="space-y-2">
@@ -29,13 +29,10 @@ export function WeightsSumBar({ holdings }: Props) {
           />
         ))}
       </div>
-      {/* Warning when target weights don't sum to 100 */}
-      {sumWarning ? (
-        <p className="flex items-center gap-1 text-xs text-warning">
-          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
-          Target weights sum to {formatNumber(weightsSumPct, 'weight')}. Remaining {formatNumber(cashTargetPct, 'weight')} held as cash.
-        </p>
-      ) : null}
+      {/* AC6 — WeightsSumWarning with exact substituted text */}
+      {sumWarning && (
+        <WeightsSumWarning weightsSumPct={weightsSumPct} cashTargetPct={cashTargetPct} />
+      )}
     </div>
   )
 }

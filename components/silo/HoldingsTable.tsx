@@ -9,9 +9,24 @@ interface Props {
   siloId: string
   isManual: boolean
   baseCurrency: string
+  /** Local (unsaved) target weights keyed by asset_id (AC5). */
+  localWeights: Record<string, string>
+  onWeightChange: (assetId: string, value: string) => void
+  /** Computed cash target % passed through to CashBalanceRow (AC7). */
+  cashTargetPct: number
 }
 
-export function HoldingsTable({ holdings, cashBalance, driftThreshold, siloId, isManual, baseCurrency }: Props) {
+export function HoldingsTable({
+  holdings,
+  cashBalance,
+  driftThreshold,
+  siloId,
+  isManual,
+  baseCurrency,
+  localWeights,
+  onWeightChange,
+  cashTargetPct,
+}: Props) {
   return (
     <div className="w-full border border-border rounded-lg overflow-hidden">
       <table className="w-full text-sm">
@@ -35,9 +50,15 @@ export function HoldingsTable({ holdings, cashBalance, driftThreshold, siloId, i
               driftThreshold={driftThreshold}
               isManual={isManual}
               baseCurrency={baseCurrency}
+              localTargetWeight={localWeights[h.asset_id] ?? String(h.target_weight_pct)}
+              onWeightChange={onWeightChange}
             />
           ))}
-          <CashBalanceRow cashBalance={cashBalance} baseCurrency={baseCurrency} />
+          <CashBalanceRow
+            cashBalance={cashBalance}
+            baseCurrency={baseCurrency}
+            cashTargetPct={cashTargetPct}
+          />
         </tbody>
       </table>
     </div>

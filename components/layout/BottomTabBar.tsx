@@ -1,7 +1,6 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Home,
   PieChart,
@@ -10,6 +9,7 @@ import {
   Settings2,
 } from 'lucide-react'
 import { useSession } from '@/contexts/SessionContext'
+import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { cn } from '@/lib/utils'
 
 interface TabItem {
@@ -28,7 +28,15 @@ const TAB_ITEMS: TabItem[] = [
 
 export function BottomTabBar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { siloCount } = useSession()
+  const { isDirty, confirmNavigation } = useDirtyState()
+
+  function handleTabClick(href: string) {
+    if (pathname.startsWith(href)) return
+    if (!confirmNavigation()) return  // AC9
+    router.push(href)
+  }
 
   return (
     <nav
@@ -38,20 +46,31 @@ export function BottomTabBar() {
     >
       {TAB_ITEMS.map((item) => {
         const isActive = pathname.startsWith(item.href)
+        // AC9: amber dot on Silos tab when dirty
+        const showDirtyDot = isDirty && item.href === '/silos'
         const Icon = item.icon
 
         return (
-          <Link
+          <button
             key={item.href}
-            href={item.href}
+            onClick={() => handleTabClick(item.href)}
             className={cn(
-              'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 text-xs transition-colors',
+              'relative flex flex-col items-center justify-center gap-0.5 flex-1 py-2 text-xs transition-colors',
               'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-md',
               isActive ? 'text-primary' : 'text-muted-foreground',
             )}
             aria-current={isActive ? 'page' : undefined}
           >
-            <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <div className="relative">
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              {/* AC9: amber dot indicator (non-colour: sr-only label satisfies Rule 13) */}
+              {showDirtyDot && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-400"
+                  aria-label="Unsaved changes"
+                />
+              )}
+            </div>
             <span>{item.label}</span>
             {item.href === '/silos' && (
               <span
@@ -61,7 +80,7 @@ export function BottomTabBar() {
                 [{siloCount}/5]
               </span>
             )}
-          </Link>
+          </button>
         )
       })}
     </nav>

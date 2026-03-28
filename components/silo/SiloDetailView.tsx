@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Save } from 'lucide-react'
 import { SiloHeader } from '@/components/silo/SiloHeader'
 import { SiloSummaryBar } from '@/components/silo/SiloSummaryBar'
 import { WeightsSumBar } from '@/components/silo/WeightsSumBar'
@@ -10,7 +12,8 @@ import { AssetSearchModal } from '@/components/silo/AssetSearchModal'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
-import type { Holding, HoldingsResponse } from '@/lib/types/holdings'
+import { useDirtyGuard } from '@/hooks/useDirtyGuard'
+import type { HoldingsResponse } from '@/lib/types/holdings'
 
 interface SiloData {
   id: string
@@ -26,13 +29,82 @@ interface Props {
 
 export function SiloDetailView({ silo }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
+  const queryClient = useQueryClient()
 
+  // ── Holdings fetch ──────────────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery<HoldingsResponse>({
     queryKey: ['holdings', silo.id],
     queryFn: async () => {
       const res = await fetch(`/api/silos/${silo.id}/holdings`)
       if (!res.ok) throw new Error('Failed to fetch holdings')
       return res.json()
+    },
+  })
+
+  // ── Local weight state (AC5) ────────────────────────────────────────────────
+  // localWeights: what the user is currently editing (may differ from server)
+  // savedWeights: last state successfully persisted to server
+  const [localWeights, setLocalWeights] = useState<Record<string, string>>({})
+  const [savedWeights, setSavedWeights] = useState<Record<string, string>>({})
+
+  // Initialise / re-sync when server data arrives (e.g. after adding a holding)
+  useEffect(() => {
+    if (!data) return
+    const fromServer: Record<string, string> = Object.fromEntries(
+      data.holdings.map(h => [h.asset_id, h.target_weight_pct.toFixed(3)])
+    )
+    setLocalWeights(prev => {
+      // Keep any unsaved local edits; only add new assets from server
+      const merged: Record<string, string> = { ...fromServer }
+      for (const [id, v] of Object.entries(prev)) {
+        if (id in fromServer) merged[id] = v  // preserve local edit
+      }
+      return merged
+    })
+    setSavedWeights(fromServer)
+  }, [data])
+
+  const isDirty = JSON.stringify(localWeights) !== JSON.stringify(savedWeights)
+
+  // ── Dirty guard (AC9) ───────────────────────────────────────────────────────
+  useDirtyGuard(isDirty)
+
+  // ── Live sum for WeightsSumBar (AC5) ────────────────────────────────────────
+  const weightsSumPct = useMemo(
+    () => Object.values(localWeights).reduce((sum, v) => sum + (parseFloat(v) || 0), 0),
+    [localWeights]
+  )
+  const cashTargetPct = Math.max(0, 100 - weightsSumPct)
+
+  function handleWeightChange(assetId: string, value: string) {
+    setLocalWeights(prev => ({ ...prev, [assetId]: value }))
+  }
+
+  // ── Save weights mutation ───────────────────────────────────────────────────
+  const { mutate: saveWeights, isPending: isSaving } = useMutation({
+    mutationFn: async () => {
+      const weights = Object.entries(localWeights).map(([asset_id, w]) => ({
+        asset_id,
+        weight_pct: parseFloat(w) || 0,
+      }))
+      const res = await fetch(`/api/silos/${silo.id}/target-weights`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weights }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err?.error?.message ?? 'Failed to save weights')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      setSavedWeights({ ...localWeights })
+      queryClient.invalidateQueries({ queryKey: ['holdings', silo.id] })
+      toast.success('Target weights saved')
+    },
+    onError: (err: Error) => {
+      toast.error(err.message ?? 'Failed to save target weights')
     },
   })
 
@@ -53,7 +125,21 @@ export function SiloDetailView({ silo }: Props) {
             cashBalance={data.cash_balance}
             baseCurrency={silo.base_currency}
           />
-          <WeightsSumBar holdings={data.holdings} />
+          <WeightsSumBar holdings={data.holdings} weightsSumPct={weightsSumPct} />
+
+          {/* Save weights button — visible when there are holdings */}
+          {data.holdings.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => saveWeights()}
+                disabled={!isDirty || isSaving}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {isSaving ? 'Saving…' : 'Save weights'}
+              </button>
+            </div>
+          )}
 
           {data.holdings.length === 0 ? (
             <EmptyState
@@ -68,6 +154,9 @@ export function SiloDetailView({ silo }: Props) {
               siloId={silo.id}
               isManual={isManual}
               baseCurrency={silo.base_currency}
+              localWeights={localWeights}
+              onWeightChange={handleWeightChange}
+              cashTargetPct={cashTargetPct}
             />
           )}
         </>
