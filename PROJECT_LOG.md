@@ -39,6 +39,29 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-012 — Rebalance history endpoints + UI
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `app/api/silos/[silo_id]/rebalance/history/route.ts` — paginated GET, sessions + orders + snapshot_before, newest-first
+- `app/api/rebalance/history/route.ts` — cross-silo GET, each session includes silo_name + silo_id
+- `app/(dashboard)/silos/[silo_id]/history/page.tsx` — server component: auth guard, silo ownership check, generateMetadata
+- `components/rebalance/RebalanceHistoryView.tsx` — client component: expandable rows, snapshot_before detail table, pagination, LoadingSkeleton/EmptyState/ErrorBanner
+- 8 integration tests across both routes (5 per-silo + 3 cross-silo), all green
+
+**Decisions made:**
+- `snapshot_before` included in both API responses (not lazy-loaded) so expansion is instant with no extra round-trip
+- `new URL(request.url).searchParams` used instead of `request.nextUrl.searchParams` — the latter is not available on native `Request` in Vitest mocks
+- `silos` join typed with `Array.isArray` guard — Supabase client infers many-to-one FK joins as arrays at the type level
+
+**Discovered issues / carry-over notes:**
+- STORY-013 (BITKUB sync) is the next unblocked story in EPIC-04
+
+**Quality gates passed:** type-check ✅ | test ✅ (155/155) | build ✅ | DoD grep ✅
+
+---
+
 ### STORY-011b — Rebalancing wizard UI (3-step: Config, Review, Result)
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
