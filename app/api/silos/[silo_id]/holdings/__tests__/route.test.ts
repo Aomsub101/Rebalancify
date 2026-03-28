@@ -21,7 +21,7 @@ function makeParams() {
   return { params: Promise.resolve({ silo_id: SILO_ID }) }
 }
 
-function makeSiloMock(data = { id: SILO_ID, drift_threshold: 5.0, platform_type: 'manual' }) {
+function makeSiloMock(data: { id: string; drift_threshold: number; platform_type: string } | null = { id: SILO_ID, drift_threshold: 5.0, platform_type: 'manual' }) {
   return {
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({

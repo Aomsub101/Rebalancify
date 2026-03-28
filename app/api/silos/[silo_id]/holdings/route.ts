@@ -71,7 +71,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Compute per-holding derived values
   const now = Date.now()
   const holdings = rows.map(h => {
-    const asset = h.assets as { ticker: string; name: string; asset_type: string }
+    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string }
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
     const qty = new Decimal(h.quantity as string)
     const currentValue = qty.mul(price)
