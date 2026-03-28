@@ -14,6 +14,8 @@ interface ProfileData {
   silo_limit: number
   alpaca_connected: boolean
   alpaca_mode: string
+  innovestx_equity_connected: boolean
+  innovestx_digital_connected: boolean
 }
 
 async function fetchProfile(): Promise<ProfileData> {
@@ -53,6 +55,22 @@ export default function SettingsPage() {
   const [isSavingAlpaca, setIsSavingAlpaca] = useState(false)
   const [alpacaSaved, setAlpacaSaved] = useState(false)
 
+  // InnovestX equity (Settrade) state
+  const [invxEquityKey, setInvxEquityKey] = useState('')
+  const [invxEquitySecret, setInvxEquitySecret] = useState('')
+  const [showInvxEquityKey, setShowInvxEquityKey] = useState(false)
+  const [showInvxEquitySecret, setShowInvxEquitySecret] = useState(false)
+  const [isSavingInvxEquity, setIsSavingInvxEquity] = useState(false)
+  const [invxEquitySaved, setInvxEquitySaved] = useState(false)
+
+  // InnovestX digital asset state
+  const [invxDigitalKey, setInvxDigitalKey] = useState('')
+  const [invxDigitalSecret, setInvxDigitalSecret] = useState('')
+  const [showInvxDigitalKey, setShowInvxDigitalKey] = useState(false)
+  const [showInvxDigitalSecret, setShowInvxDigitalSecret] = useState(false)
+  const [isSavingInvxDigital, setIsSavingInvxDigital] = useState(false)
+  const [invxDigitalSaved, setInvxDigitalSaved] = useState(false)
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? '')
@@ -60,6 +78,8 @@ export default function SettingsPage() {
       setAlpacaMode((profile.alpaca_mode as 'paper' | 'live') ?? 'paper')
       // After load, reset input fields — saved keys are masked as ••••••••
       setAlpacaSaved(profile.alpaca_connected)
+      setInvxEquitySaved(profile.innovestx_equity_connected)
+      setInvxDigitalSaved(profile.innovestx_digital_connected)
     }
   }, [profile])
 
@@ -123,6 +143,52 @@ export default function SettingsPage() {
       setSaveError(err instanceof Error ? err.message : 'Failed to save Alpaca settings.')
     } finally {
       setIsSavingAlpaca(false)
+    }
+  }
+
+  async function handleSaveInvxEquity() {
+    setSaveError(null)
+    setIsSavingInvxEquity(true)
+    try {
+      const fields: Record<string, unknown> = {}
+      if (invxEquityKey.trim()) fields.innovestx_key = invxEquityKey.trim()
+      if (invxEquitySecret.trim()) fields.innovestx_secret = invxEquitySecret.trim()
+      if (Object.keys(fields).length === 0) return
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setInvxEquityKey('')
+      setInvxEquitySecret('')
+      setShowInvxEquityKey(false)
+      setShowInvxEquitySecret(false)
+      setInvxEquitySaved(true)
+      toast.success('InnovestX equity credentials saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save InnovestX equity credentials.')
+    } finally {
+      setIsSavingInvxEquity(false)
+    }
+  }
+
+  async function handleSaveInvxDigital() {
+    setSaveError(null)
+    setIsSavingInvxDigital(true)
+    try {
+      const fields: Record<string, unknown> = {}
+      if (invxDigitalKey.trim()) fields.innovestx_digital_key = invxDigitalKey.trim()
+      if (invxDigitalSecret.trim()) fields.innovestx_digital_secret = invxDigitalSecret.trim()
+      if (Object.keys(fields).length === 0) return
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setInvxDigitalKey('')
+      setInvxDigitalSecret('')
+      setShowInvxDigitalKey(false)
+      setShowInvxDigitalSecret(false)
+      setInvxDigitalSaved(true)
+      toast.success('InnovestX digital asset credentials saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save InnovestX digital credentials.')
+    } finally {
+      setIsSavingInvxDigital(false)
     }
   }
 
@@ -391,6 +457,202 @@ export default function SettingsPage() {
             )}
           >
             {isSavingAlpaca ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
+      {/* InnovestX — Settrade Equity section — AC6 */}
+      <section aria-labelledby="invx-equity-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 id="invx-equity-heading" className="text-xl font-medium text-foreground">InnovestX — Settrade Equity</h2>
+          {/* ConnectionStatusDot — AC6 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {profile?.innovestx_equity_connected || invxEquitySaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">Settrade Open API — App ID and App Secret for Thai equity holdings.</p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="invx-equity-key" className="block text-sm font-medium text-foreground mb-1.5">
+              Settrade App ID
+            </label>
+            <div className="relative">
+              <input
+                id="invx-equity-key"
+                type={showInvxEquityKey ? 'text' : 'password'}
+                value={invxEquityKey}
+                onChange={(e) => setInvxEquityKey(e.target.value)}
+                placeholder={invxEquitySaved ? '••••••••' : 'Paste your Settrade App ID'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowInvxEquityKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showInvxEquityKey ? 'Hide App ID' : 'Show App ID'}
+              >
+                {showInvxEquityKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="invx-equity-secret" className="block text-sm font-medium text-foreground mb-1.5">
+              Settrade App Secret
+            </label>
+            <div className="relative">
+              <input
+                id="invx-equity-secret"
+                type={showInvxEquitySecret ? 'text' : 'password'}
+                value={invxEquitySecret}
+                onChange={(e) => setInvxEquitySecret(e.target.value)}
+                placeholder={invxEquitySaved ? '••••••••' : 'Paste your Settrade App Secret'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowInvxEquitySecret(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showInvxEquitySecret ? 'Hide App Secret' : 'Show App Secret'}
+              >
+                {showInvxEquitySecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveInvxEquity}
+            disabled={isSavingInvxEquity || (!invxEquityKey.trim() && !invxEquitySecret.trim())}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingInvxEquity ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
+      {/* InnovestX — Digital Asset section — AC6 */}
+      <section aria-labelledby="invx-digital-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 id="invx-digital-heading" className="text-xl font-medium text-foreground">InnovestX — Digital Asset</h2>
+          {/* ConnectionStatusDot — AC6 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {profile?.innovestx_digital_connected || invxDigitalSaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Digital Asset API credentials for crypto holdings. Contact InnovestX support to obtain these credentials.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="invx-digital-key" className="block text-sm font-medium text-foreground mb-1.5">
+              Digital Asset API Key
+            </label>
+            <div className="relative">
+              <input
+                id="invx-digital-key"
+                type={showInvxDigitalKey ? 'text' : 'password'}
+                value={invxDigitalKey}
+                onChange={(e) => setInvxDigitalKey(e.target.value)}
+                placeholder={invxDigitalSaved ? '••••••••' : 'Paste your Digital Asset API Key'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowInvxDigitalKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showInvxDigitalKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showInvxDigitalKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="invx-digital-secret" className="block text-sm font-medium text-foreground mb-1.5">
+              Digital Asset API Secret
+            </label>
+            <div className="relative">
+              <input
+                id="invx-digital-secret"
+                type={showInvxDigitalSecret ? 'text' : 'password'}
+                value={invxDigitalSecret}
+                onChange={(e) => setInvxDigitalSecret(e.target.value)}
+                placeholder={invxDigitalSaved ? '••••••••' : 'Paste your Digital Asset API Secret'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowInvxDigitalSecret(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showInvxDigitalSecret ? 'Hide API secret' : 'Show API secret'}
+              >
+                {showInvxDigitalSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveInvxDigital}
+            disabled={isSavingInvxDigital || (!invxDigitalKey.trim() && !invxDigitalSecret.trim())}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingInvxDigital ? 'Saving…' : 'Save'}
           </button>
         </div>
       </section>

@@ -4,9 +4,12 @@
  * All functions are pure — no network calls, no Supabase.
  */
 import { describe, it, expect } from 'vitest'
+import { createHmac } from 'crypto'
 import {
   buildSettradeBasicAuth,
   parseSettradePortfolio,
+  buildInnovestxDigitalSignature,
+  parseInnovestxDigitalBalances,
 } from '@/lib/innovestx'
 
 // ---------------------------------------------------------------------------
@@ -127,5 +130,114 @@ describe('parseSettradePortfolio', () => {
       ],
     }
     expect(parseSettradePortfolio(raw)).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildInnovestxDigitalSignature
+// ---------------------------------------------------------------------------
+describe('buildInnovestxDigitalSignature', () => {
+  const secret = 'test-digital-secret'
+  const timestamp = '1711584000000'
+  const method = 'GET'
+  const path = '/api/v1/account/balances'
+  const body = ''
+
+  it('returns a 64-character lowercase hex string', () => {
+    const sig = buildInnovestxDigitalSignature(secret, timestamp, method, path, body)
+    expect(sig).toHaveLength(64)
+    expect(sig).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('produces the correct HMAC-SHA256 of (timestamp+METHOD+path+body)', () => {
+    const message = timestamp + method.toUpperCase() + path + body
+    const expected = createHmac('sha256', secret).update(message).digest('hex')
+    expect(buildInnovestxDigitalSignature(secret, timestamp, method, path, body)).toBe(expected)
+  })
+
+  it('is case-insensitive on method — GET and get produce the same signature', () => {
+    const upper = buildInnovestxDigitalSignature(secret, timestamp, 'GET', path, body)
+    const lower = buildInnovestxDigitalSignature(secret, timestamp, 'get', path, body)
+    expect(upper).toBe(lower)
+  })
+
+  it('produces a different signature for different secrets', () => {
+    const sig1 = buildInnovestxDigitalSignature('secret-a', timestamp, method, path, body)
+    const sig2 = buildInnovestxDigitalSignature('secret-b', timestamp, method, path, body)
+    expect(sig1).not.toBe(sig2)
+  })
+
+  it('produces a different signature for different timestamps', () => {
+    const sig1 = buildInnovestxDigitalSignature(secret, '1000000', method, path, body)
+    const sig2 = buildInnovestxDigitalSignature(secret, '9999999', method, path, body)
+    expect(sig1).not.toBe(sig2)
+  })
+
+  it('includes body in the signature when body is non-empty', () => {
+    const withBody = buildInnovestxDigitalSignature(secret, timestamp, 'POST', path, '{"test":1}')
+    const noBody  = buildInnovestxDigitalSignature(secret, timestamp, 'POST', path, '')
+    expect(withBody).not.toBe(noBody)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// parseInnovestxDigitalBalances
+// ---------------------------------------------------------------------------
+describe('parseInnovestxDigitalBalances', () => {
+  const sampleRaw = {
+    data: {
+      assets: [
+        { symbol: 'BTC', available: '0.00500000', locked: '0.00000000' },
+        { symbol: 'ETH', available: '1.23456789', locked: '0.00000000' },
+        { symbol: 'XRP', available: '0.00000000', locked: '0.00000000' },
+      ],
+    },
+  }
+
+  it('returns one holding per non-zero asset', () => {
+    const result = parseInnovestxDigitalBalances(sampleRaw)
+    expect(result).toHaveLength(2)
+  })
+
+  it('extracts the correct symbol', () => {
+    const result = parseInnovestxDigitalBalances(sampleRaw)
+    const symbols = result.map((r) => r.symbol)
+    expect(symbols).toContain('BTC')
+    expect(symbols).toContain('ETH')
+    expect(symbols).not.toContain('XRP')
+  })
+
+  it('sets quantity to the available balance string', () => {
+    const result = parseInnovestxDigitalBalances(sampleRaw)
+    const btc = result.find((r) => r.symbol === 'BTC')
+    expect(btc?.quantity).toBe('0.00500000')
+  })
+
+  it('filters assets where available is zero', () => {
+    const raw = {
+      data: {
+        assets: [
+          { symbol: 'BTC', available: '0.00000000', locked: '0.00000000' },
+          { symbol: 'ETH', available: '2.00000000', locked: '0.00000000' },
+        ],
+      },
+    }
+    const result = parseInnovestxDigitalBalances(raw)
+    expect(result).toHaveLength(1)
+    expect(result[0].symbol).toBe('ETH')
+  })
+
+  it('returns empty array when assets list is empty', () => {
+    expect(parseInnovestxDigitalBalances({ data: { assets: [] } })).toEqual([])
+  })
+
+  it('returns empty array when data is missing', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(parseInnovestxDigitalBalances({} as any)).toEqual([])
+  })
+
+  it('returns empty array when assets key is missing', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(parseInnovestxDigitalBalances({ data: {} } as any)).toEqual([])
   })
 })

@@ -121,6 +121,23 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // InnovestX Digital Asset credentials — STORY-014b
+  // AC1: encrypt and store in innovestx_digital_key_enc / innovestx_digital_secret_enc
+  if ('innovestx_digital_key' in body || 'innovestx_digital_secret' in body) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    if ('innovestx_digital_key' in body && typeof body.innovestx_digital_key === 'string' && body.innovestx_digital_key.length > 0) {
+      allowed.innovestx_digital_key_enc = encrypt(body.innovestx_digital_key, encKey)
+    }
+    if ('innovestx_digital_secret' in body && typeof body.innovestx_digital_secret === 'string' && body.innovestx_digital_secret.length > 0) {
+      allowed.innovestx_digital_secret_enc = encrypt(body.innovestx_digital_secret, encKey)
+    }
+  }
+
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })
   }
