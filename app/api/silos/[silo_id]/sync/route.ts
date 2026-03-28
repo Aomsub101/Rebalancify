@@ -22,7 +22,9 @@ import {
   SETTRADE_ACCOUNTS_PATH,
   SETTRADE_PORTFOLIO_PATH,
   INNOVESTX_DIGITAL_BASE_URL,
+  INNOVESTX_DIGITAL_HOST,
   INNOVESTX_DIGITAL_BALANCES_PATH,
+  INNOVESTX_DIGITAL_CONTENT_TYPE,
 } from '@/lib/innovestx'
 import { fetchPrice } from '@/lib/priceService'
 
@@ -680,10 +682,15 @@ async function syncInnovestx(
     const timestamp = Date.now().toString()
     const requestUid = crypto.randomUUID()
     const signature = buildInnovestxDigitalSignature(
+      digitalKey,
       digitalSecret,
-      timestamp,
       'GET',
+      INNOVESTX_DIGITAL_HOST,
       INNOVESTX_DIGITAL_BALANCES_PATH,
+      '',
+      INNOVESTX_DIGITAL_CONTENT_TYPE,
+      requestUid,
+      timestamp,
       '',
     )
 

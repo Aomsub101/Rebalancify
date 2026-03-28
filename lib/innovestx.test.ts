@@ -135,63 +135,85 @@ describe('parseSettradePortfolio', () => {
 
 // ---------------------------------------------------------------------------
 // buildInnovestxDigitalSignature
+// Correct format per api-docs.innovestxonline.com:
+//   content_to_sign = apiKey + METHOD + host + path + query + contentType + requestUid + timestamp + body
 // ---------------------------------------------------------------------------
 describe('buildInnovestxDigitalSignature', () => {
+  const apiKey = 'test-api-key-64chars-padded-to-64-chars-1234567890abcdef12345678'
   const secret = 'test-digital-secret'
   const timestamp = '1711584000000'
+  const requestUid = '019d1bae-e2f1-42d9-b9e8-23d495dbe9f9'
   const method = 'GET'
-  const path = '/api/v1/account/balances'
+  const host = 'api.innovestxonline.com'
+  const path = '/api/v1/digital-asset/account/balance/inquiry'
+  const query = ''
+  const contentType = 'application/json'
   const body = ''
 
   it('returns a 64-character lowercase hex string', () => {
-    const sig = buildInnovestxDigitalSignature(secret, timestamp, method, path, body)
+    const sig = buildInnovestxDigitalSignature(apiKey, secret, method, host, path, query, contentType, requestUid, timestamp, body)
     expect(sig).toHaveLength(64)
     expect(sig).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it('produces the correct HMAC-SHA256 of (timestamp+METHOD+path+body)', () => {
-    const message = timestamp + method.toUpperCase() + path + body
+  it('produces the correct HMAC-SHA256 of (apiKey+METHOD+host+path+query+contentType+requestUid+timestamp+body)', () => {
+    const message = apiKey + method.toUpperCase() + host + path + query + contentType + requestUid + timestamp + body
     const expected = createHmac('sha256', secret).update(message).digest('hex')
-    expect(buildInnovestxDigitalSignature(secret, timestamp, method, path, body)).toBe(expected)
+    expect(buildInnovestxDigitalSignature(apiKey, secret, method, host, path, query, contentType, requestUid, timestamp, body)).toBe(expected)
   })
 
   it('is case-insensitive on method — GET and get produce the same signature', () => {
-    const upper = buildInnovestxDigitalSignature(secret, timestamp, 'GET', path, body)
-    const lower = buildInnovestxDigitalSignature(secret, timestamp, 'get', path, body)
+    const upper = buildInnovestxDigitalSignature(apiKey, secret, 'GET', host, path, query, contentType, requestUid, timestamp, body)
+    const lower = buildInnovestxDigitalSignature(apiKey, secret, 'get', host, path, query, contentType, requestUid, timestamp, body)
     expect(upper).toBe(lower)
   })
 
   it('produces a different signature for different secrets', () => {
-    const sig1 = buildInnovestxDigitalSignature('secret-a', timestamp, method, path, body)
-    const sig2 = buildInnovestxDigitalSignature('secret-b', timestamp, method, path, body)
+    const sig1 = buildInnovestxDigitalSignature(apiKey, 'secret-a', method, host, path, query, contentType, requestUid, timestamp, body)
+    const sig2 = buildInnovestxDigitalSignature(apiKey, 'secret-b', method, host, path, query, contentType, requestUid, timestamp, body)
+    expect(sig1).not.toBe(sig2)
+  })
+
+  it('produces a different signature for different apiKeys', () => {
+    const sig1 = buildInnovestxDigitalSignature('key-aaaa', secret, method, host, path, query, contentType, requestUid, timestamp, body)
+    const sig2 = buildInnovestxDigitalSignature('key-bbbb', secret, method, host, path, query, contentType, requestUid, timestamp, body)
     expect(sig1).not.toBe(sig2)
   })
 
   it('produces a different signature for different timestamps', () => {
-    const sig1 = buildInnovestxDigitalSignature(secret, '1000000', method, path, body)
-    const sig2 = buildInnovestxDigitalSignature(secret, '9999999', method, path, body)
+    const sig1 = buildInnovestxDigitalSignature(apiKey, secret, method, host, path, query, contentType, requestUid, '1000000', body)
+    const sig2 = buildInnovestxDigitalSignature(apiKey, secret, method, host, path, query, contentType, requestUid, '9999999', body)
     expect(sig1).not.toBe(sig2)
   })
 
   it('includes body in the signature when body is non-empty', () => {
-    const withBody = buildInnovestxDigitalSignature(secret, timestamp, 'POST', path, '{"test":1}')
-    const noBody  = buildInnovestxDigitalSignature(secret, timestamp, 'POST', path, '')
+    const withBody = buildInnovestxDigitalSignature(apiKey, secret, 'POST', host, path, query, contentType, requestUid, timestamp, '{"symbol":"BTCTHB"}')
+    const noBody   = buildInnovestxDigitalSignature(apiKey, secret, 'POST', host, path, query, contentType, requestUid, timestamp, '')
     expect(withBody).not.toBe(noBody)
+  })
+
+  it('includes query string in the signature when query is non-empty', () => {
+    const withQuery = buildInnovestxDigitalSignature(apiKey, secret, method, host, path, '?limit=100', contentType, requestUid, timestamp, body)
+    const noQuery   = buildInnovestxDigitalSignature(apiKey, secret, method, host, path, '', contentType, requestUid, timestamp, body)
+    expect(withQuery).not.toBe(noQuery)
   })
 })
 
 // ---------------------------------------------------------------------------
 // parseInnovestxDigitalBalances
+// Correct shape per api-docs.innovestxonline.com GET /api/v1/digital-asset/account/balance/inquiry:
+//   { code: "0000", message: "SUCCESS", data: [{ product, amount, hold, ... }] }
+// data is a TOP-LEVEL array; field names are 'product' and 'amount' (not 'symbol'/'available')
 // ---------------------------------------------------------------------------
 describe('parseInnovestxDigitalBalances', () => {
   const sampleRaw = {
-    data: {
-      assets: [
-        { symbol: 'BTC', available: '0.00500000', locked: '0.00000000' },
-        { symbol: 'ETH', available: '1.23456789', locked: '0.00000000' },
-        { symbol: 'XRP', available: '0.00000000', locked: '0.00000000' },
-      ],
-    },
+    code: '0000',
+    message: 'SUCCESS',
+    data: [
+      { product: 'BTC', amount: '0.00500000', hold: '0.00000000', pendingDeposit: '0.00000000', pendingWithdraw: '0.00000000' },
+      { product: 'ETH', amount: '1.23456789', hold: '0.00000000', pendingDeposit: '0.00000000', pendingWithdraw: '0.00000000' },
+      { product: 'XRP', amount: '0.00000000', hold: '0.00000000', pendingDeposit: '0.00000000', pendingWithdraw: '0.00000000' },
+    ],
   }
 
   it('returns one holding per non-zero asset', () => {
@@ -199,7 +221,7 @@ describe('parseInnovestxDigitalBalances', () => {
     expect(result).toHaveLength(2)
   })
 
-  it('extracts the correct symbol', () => {
+  it('extracts symbol from the product field', () => {
     const result = parseInnovestxDigitalBalances(sampleRaw)
     const symbols = result.map((r) => r.symbol)
     expect(symbols).toContain('BTC')
@@ -207,28 +229,27 @@ describe('parseInnovestxDigitalBalances', () => {
     expect(symbols).not.toContain('XRP')
   })
 
-  it('sets quantity to the available balance string', () => {
+  it('sets quantity from the amount field', () => {
     const result = parseInnovestxDigitalBalances(sampleRaw)
     const btc = result.find((r) => r.symbol === 'BTC')
     expect(btc?.quantity).toBe('0.00500000')
   })
 
-  it('filters assets where available is zero', () => {
+  it('filters assets where amount is zero', () => {
     const raw = {
-      data: {
-        assets: [
-          { symbol: 'BTC', available: '0.00000000', locked: '0.00000000' },
-          { symbol: 'ETH', available: '2.00000000', locked: '0.00000000' },
-        ],
-      },
+      code: '0000',
+      data: [
+        { product: 'BTC', amount: '0.00000000', hold: '0.00000000' },
+        { product: 'ETH', amount: '2.00000000', hold: '0.00000000' },
+      ],
     }
     const result = parseInnovestxDigitalBalances(raw)
     expect(result).toHaveLength(1)
     expect(result[0].symbol).toBe('ETH')
   })
 
-  it('returns empty array when assets list is empty', () => {
-    expect(parseInnovestxDigitalBalances({ data: { assets: [] } })).toEqual([])
+  it('returns empty array when data array is empty', () => {
+    expect(parseInnovestxDigitalBalances({ code: '0000', data: [] })).toEqual([])
   })
 
   it('returns empty array when data is missing', () => {
@@ -236,8 +257,8 @@ describe('parseInnovestxDigitalBalances', () => {
     expect(parseInnovestxDigitalBalances({} as any)).toEqual([])
   })
 
-  it('returns empty array when assets key is missing', () => {
+  it('returns empty array when raw is null/undefined', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(parseInnovestxDigitalBalances({ data: {} } as any)).toEqual([])
+    expect(parseInnovestxDigitalBalances(null as any)).toEqual([])
   })
 })

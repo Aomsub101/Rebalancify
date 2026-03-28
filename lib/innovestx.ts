@@ -88,24 +88,35 @@ export const SETTRADE_PORTFOLIO_PATH = (accountNo: string) =>
 /**
  * Builds the HMAC-SHA256 request signature for the InnovestX Digital Asset API.
  *
- * Message format:  timestamp + METHOD.toUpperCase() + path + body
- * Algorithm:       HMAC-SHA256 → lowercase hex
+ * Message format (per api-docs.innovestxonline.com):
+ *   apiKey + METHOD + host + path + query + contentType + requestUid + timestamp + body
+ * Algorithm: HMAC-SHA256 → lowercase hex
  *
- * @param secret    Plaintext Digital Asset API Secret
- * @param timestamp Unix timestamp in milliseconds (string)
- * @param method    HTTP method (case-insensitive — always uppercased internally)
- * @param path      Request path including leading slash (e.g. '/api/v1/account/balances')
- * @param body      JSON-stringified request body, or '' for GET requests
- * @returns         64-character lowercase hex signature
+ * @param apiKey      X-INVX-APIKEY value
+ * @param secret      Plaintext Digital Asset API Secret
+ * @param method      HTTP method (case-insensitive — always uppercased internally)
+ * @param host        Hostname only, e.g. 'api.innovestxonline.com'
+ * @param path        Request path with leading slash, e.g. '/api/v1/digital-asset/account/balance/inquiry'
+ * @param query       Query string including '?', or '' if none
+ * @param contentType Content-Type header value, e.g. 'application/json'
+ * @param requestUid  X-INVX-REQUEST-UID (UUID v4)
+ * @param timestamp   Unix timestamp in milliseconds (string), X-INVX-TIMESTAMP
+ * @param body        JSON-stringified request body, or '' for GET requests
+ * @returns           64-character lowercase hex signature
  */
 export function buildInnovestxDigitalSignature(
+  apiKey: string,
   secret: string,
-  timestamp: string,
   method: string,
+  host: string,
   path: string,
+  query: string,
+  contentType: string,
+  requestUid: string,
+  timestamp: string,
   body: string,
 ): string {
-  const message = timestamp + method.toUpperCase() + path + body
+  const message = apiKey + method.toUpperCase() + host + path + query + contentType + requestUid + timestamp + body
   return createHmac('sha256', secret).update(message).digest('hex')
 }
 
@@ -115,45 +126,51 @@ export function buildInnovestxDigitalSignature(
 
 export interface InnovestxDigitalHolding {
   symbol: string    // e.g. 'BTC', 'ETH'
-  quantity: string  // as provided by API — already 8dp string
+  quantity: string  // as provided by API — string
 }
 
 interface InnovestxDigitalAsset {
-  symbol: string
-  available: string
-  locked: string
+  product: string   // shortened product name, e.g. 'BTC'
+  amount: string    // unit amount (total balance)
+  hold: string      // amount held / not available
   [key: string]: unknown
 }
 
 interface InnovestxDigitalBalancesRaw {
-  data?: {
-    assets?: InnovestxDigitalAsset[]
-    [key: string]: unknown
-  }
+  code?: string
+  message?: string
+  data?: InnovestxDigitalAsset[]   // top-level array (not nested in data.assets)
 }
 
 /**
- * Parses the InnovestX Digital Asset balances endpoint response.
- * Only assets with a non-zero available balance are included.
+ * Parses the InnovestX Digital Asset account balance endpoint response.
+ * Only assets with a non-zero amount are included.
  *
- * @param raw  Raw JSON object from GET /api/v1/account/balances
+ * Endpoint: GET /api/v1/digital-asset/account/balance/inquiry
+ * Response shape per api-docs.innovestxonline.com:
+ *   { code, message, data: [{ product, amount, hold, ... }] }
+ *
+ * @param raw  Raw JSON object from the balance endpoint
  * @returns    Array of { symbol, quantity }
  */
 export function parseInnovestxDigitalBalances(
   raw: InnovestxDigitalBalancesRaw,
 ): InnovestxDigitalHolding[] {
-  const assets = raw?.data?.assets ?? []
+  const assets = raw?.data ?? []
   return assets
-    .filter((a) => parseFloat(a.available) > 0)
+    .filter((a) => parseFloat(a.amount) > 0)
     .map((a) => ({
-      symbol: a.symbol,
-      quantity: a.available,
+      symbol: a.product,
+      quantity: a.amount,
     }))
 }
 
 // ---------------------------------------------------------------------------
 // Digital Asset API constants
+// Verified against api-docs.innovestxonline.com (2026-03-28)
 // ---------------------------------------------------------------------------
 
-export const INNOVESTX_DIGITAL_BASE_URL = 'https://api-digital.innovestxonline.com'
-export const INNOVESTX_DIGITAL_BALANCES_PATH = '/api/v1/account/balances'
+export const INNOVESTX_DIGITAL_BASE_URL = 'https://api.innovestxonline.com'
+export const INNOVESTX_DIGITAL_HOST = 'api.innovestxonline.com'
+export const INNOVESTX_DIGITAL_BALANCES_PATH = '/api/v1/digital-asset/account/balance/inquiry'
+export const INNOVESTX_DIGITAL_CONTENT_TYPE = 'application/json'
