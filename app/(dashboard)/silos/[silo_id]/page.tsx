@@ -31,7 +31,7 @@ export default async function SiloDetailPage({ params }: Props) {
 
   const { data: silo } = await supabase
     .from('silos')
-    .select('id, name, platform_type, base_currency')
+    .select('id, name, platform_type, base_currency, drift_threshold')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
