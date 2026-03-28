@@ -1,0 +1,63 @@
+import { HoldingRow } from '@/components/silo/HoldingRow'
+import { CashBalanceRow } from '@/components/silo/CashBalanceRow'
+
+interface Holding {
+  id: string
+  asset_id: string
+  ticker: string
+  name: string
+  asset_type: string
+  quantity: string
+  cost_basis: string | null
+  current_price: string
+  current_value: string
+  current_weight_pct: number
+  target_weight_pct: number
+  drift_pct: number
+  drift_breached: boolean
+  source: string
+  stale_days: number
+  last_updated_at: string
+}
+
+interface Props {
+  holdings: Holding[]
+  cashBalance: string
+  driftThreshold: number
+  siloId: string
+  isManual: boolean
+  baseCurrency: string
+}
+
+export function HoldingsTable({ holdings, cashBalance, driftThreshold, siloId, isManual, baseCurrency }: Props) {
+  return (
+    <div className="w-full border border-border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-secondary text-muted-foreground text-xs font-mono uppercase tracking-wider">
+          <tr>
+            <th className="px-4 py-3 text-left">Ticker / Name</th>
+            <th className="px-4 py-3 text-right">Quantity</th>
+            <th className="px-4 py-3 text-right">Value</th>
+            <th className="px-4 py-3 text-right">Weight</th>
+            <th className="px-4 py-3 text-right">Target</th>
+            <th className="px-4 py-3 text-right">Drift</th>
+            <th className="px-4 py-3 text-left">Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {holdings.map(h => (
+            <HoldingRow
+              key={h.id}
+              holding={h}
+              siloId={siloId}
+              driftThreshold={driftThreshold}
+              isManual={isManual}
+              baseCurrency={baseCurrency}
+            />
+          ))}
+          <CashBalanceRow cashBalance={cashBalance} baseCurrency={baseCurrency} />
+        </tbody>
+      </table>
+    </div>
+  )
+}
