@@ -139,6 +139,18 @@ export async function POST(request: Request, { params }: RouteContext) {
     )
   }
 
+  // 4b. Auto-create holdings row with quantity=0 (best-effort, does not fail if exists)
+  try {
+    await supabase
+      .from('holdings')
+      .upsert(
+        { silo_id, asset_id: asset.id, quantity: '0.00000000', source: 'manual' },
+        { onConflict: 'silo_id,asset_id' }
+      )
+  } catch {
+    // non-fatal — holdings row will be created when user first sets a quantity
+  }
+
   // 7. Best-effort price cache population (AC6) — failure must not block 201
   try {
     await fetchPrice(

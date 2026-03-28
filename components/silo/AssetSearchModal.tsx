@@ -82,6 +82,7 @@ export function AssetSearchModal({ siloId, open, onOpenChange }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['asset-mappings', siloId] })
+      queryClient.invalidateQueries({ queryKey: ['holdings', siloId] })
       toast.success('Asset added to silo')
       onOpenChange(false)
     },
