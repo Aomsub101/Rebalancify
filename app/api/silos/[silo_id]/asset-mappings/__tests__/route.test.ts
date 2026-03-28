@@ -137,6 +137,10 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
           }),
         }),
       })
+      // 5. holdings upsert (best-effort)
+      .mockReturnValueOnce({
+        upsert: vi.fn().mockResolvedValue({ error: null }),
+      })
 
     const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/asset-mappings`, {
       method: 'POST', body: postBody(),

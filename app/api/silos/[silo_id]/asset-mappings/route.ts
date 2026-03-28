@@ -140,15 +140,14 @@ export async function POST(request: Request, { params }: RouteContext) {
   }
 
   // 4b. Auto-create holdings row with quantity=0 (best-effort, does not fail if exists)
-  try {
-    await supabase
-      .from('holdings')
-      .upsert(
-        { silo_id, asset_id: asset.id, quantity: '0.00000000', source: 'manual' },
-        { onConflict: 'silo_id,asset_id' }
-      )
-  } catch {
-    // non-fatal — holdings row will be created when user first sets a quantity
+  const { error: holdingsErr } = await supabase
+    .from('holdings')
+    .upsert(
+      { silo_id, asset_id: asset.id, quantity: '0.00000000', source: 'manual' },
+      { onConflict: 'silo_id,asset_id' }
+    )
+  if (holdingsErr) {
+    console.warn('[asset-mappings POST] holdings auto-upsert failed:', holdingsErr.message)
   }
 
   // 7. Best-effort price cache population (AC6) — failure must not block 201
