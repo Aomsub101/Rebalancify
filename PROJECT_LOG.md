@@ -39,6 +39,26 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-015b — Schwab Holdings Sync + Settings UI
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `app/api/silos/[silo_id]/sync/route.ts` — `syncSchwab()` function: checks `schwab_token_expires < NOW()` → 401 `SCHWAB_TOKEN_EXPIRED`; decrypts access token; calls `SCHWAB_ACCOUNTS_URL?fields=positions`; handles Schwab 401 mid-window → 401; parses with `parseSchwabPositions`; upserts holdings with `source='schwab_sync'`; updates `last_synced_at`
+- `app/(dashboard)/settings/page.tsx` — Schwab section: `ConnectionStatusDot` (green/amber/grey), `TokenExpiryWarning` amber banner when `schwab_token_expired`, OAuth connect/reconnect `<a>` button linking to `/api/auth/schwab`
+- `app/api/silos/[silo_id]/__tests__/sync.test.ts` — 6 new Schwab test cases: not-connected (403), expired token (401), network error (503), mid-window 401 from Schwab (401), happy path 2 positions (200), empty positions (200)
+
+**Decisions made:**
+- No token refresh in v1.0 sync — if access token has expired (30-min TTL), Schwab returns 401 and we surface `SCHWAB_TOKEN_EXPIRED` requiring re-auth; full token refresh deferred to EPIC-10 execution work
+- Schwab equities stored with `price_source='finnhub'` (same as InnovestX equity) — Finnhub price fetch deferred to when STORY-017 price service is wired in
+
+**Discovered issues / carry-over notes:**
+- Token refresh (using `schwab_refresh_enc` to get a fresh access token) is not implemented; users must re-run OAuth if the 30-min access token lapses between sync calls; STORY-036 (Schwab execution) should add auto-refresh
+
+**Quality gates passed:** type-check ✅ | test ✅ (239/239) | build ✅
+
+---
+
 ### STORY-015 — Schwab OAuth Flow + Token Storage
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 3d — split into 015 + 015b per story Notes)

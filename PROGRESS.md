@@ -76,7 +76,7 @@
 | STORY-014  | InnovestX sync — Settrade equity branch             | ✅     | 2026-03-28 |
 | STORY-014b | InnovestX sync — digital asset branch + Settings UI | ✅     | 2026-03-28 |
 | STORY-015  | Schwab OAuth flow + token storage                    | ✅     | 2026-03-28 |
-| STORY-015b | Schwab holdings sync + Settings UI                   | ⬜     | —        |
+| STORY-015b | Schwab holdings sync + Settings UI                   | ✅     | 2026-03-28 |
 | STORY-016  | Webull sync + settings sections                      | ⬜     | —        |
 
 ---
