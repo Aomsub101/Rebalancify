@@ -11,6 +11,7 @@ export interface Holding {
   current_weight_pct: number
   target_weight_pct: number
   drift_pct: number
+  drift_state: 'green' | 'yellow' | 'red'
   drift_breached: boolean
   source: string
   stale_days: number

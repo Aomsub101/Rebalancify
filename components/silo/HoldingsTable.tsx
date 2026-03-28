@@ -5,7 +5,6 @@ import type { Holding } from '@/lib/types/holdings'
 interface Props {
   holdings: Holding[]
   cashBalance: string
-  driftThreshold: number
   siloId: string
   isManual: boolean
   baseCurrency: string
@@ -19,7 +18,6 @@ interface Props {
 export function HoldingsTable({
   holdings,
   cashBalance,
-  driftThreshold,
   siloId,
   isManual,
   baseCurrency,
@@ -47,7 +45,6 @@ export function HoldingsTable({
               key={h.id}
               holding={h}
               siloId={siloId}
-              driftThreshold={driftThreshold}
               isManual={isManual}
               baseCurrency={baseCurrency}
               localTargetWeight={localWeights[h.asset_id] ?? String(h.target_weight_pct)}

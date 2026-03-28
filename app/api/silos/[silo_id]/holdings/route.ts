@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
+import { computeDriftState } from '@/lib/drift'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -80,6 +81,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       : new Decimal(0)
     const targetWeightPct = new Decimal(targetMap.get(h.asset_id) ?? 0)
     const driftPct = currentWeightPct.minus(targetWeightPct)
+    const driftPctNum = parseFloat(driftPct.toFixed(3))
     const staleDays = Math.floor((now - new Date(h.last_updated_at as string).getTime()) / 86_400_000)
 
     return {
@@ -94,7 +96,8 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       current_value: currentValue.toFixed(8),
       current_weight_pct: parseFloat(currentWeightPct.toFixed(3)),
       target_weight_pct: parseFloat(targetWeightPct.toFixed(3)),
-      drift_pct: parseFloat(driftPct.toFixed(3)),
+      drift_pct: driftPctNum,
+      drift_state: computeDriftState(driftPctNum, Number(silo.drift_threshold)),
       drift_breached: driftPct.abs().gt(new Decimal(silo.drift_threshold)),
       source: h.source,
       stale_days: staleDays,

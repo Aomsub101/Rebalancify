@@ -13,7 +13,6 @@ import type { Holding } from '@/lib/types/holdings'
 interface Props {
   holding: Holding
   siloId: string
-  driftThreshold: number
   isManual: boolean
   baseCurrency: string
   /** Local (unsaved) target weight value driven by SiloDetailView state (AC5). */
@@ -24,7 +23,6 @@ interface Props {
 export function HoldingRow({
   holding,
   siloId,
-  driftThreshold,
   isManual,
   baseCurrency,
   localTargetWeight,
@@ -136,7 +134,7 @@ export function HoldingRow({
       </td>
       {/* Drift */}
       <td className="px-4 py-3 text-right">
-        <DriftBadge driftPct={holding.drift_pct} driftThreshold={driftThreshold} />
+        <DriftBadge driftPct={holding.drift_pct} driftState={holding.drift_state} />
       </td>
       {/* Staleness */}
       <td className="px-4 py-3 text-sm">

@@ -152,7 +152,6 @@ export function SiloDetailView({ silo }: Props) {
             <HoldingsTable
               holdings={data.holdings}
               cashBalance={data.cash_balance}
-              driftThreshold={driftThreshold}
               siloId={silo.id}
               isManual={isManual}
               baseCurrency={silo.base_currency}

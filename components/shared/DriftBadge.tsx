@@ -1,19 +1,11 @@
 import React from 'react'
 import { Circle, Triangle, AlertCircle } from 'lucide-react'
 import { formatNumber } from '@/lib/formatNumber'
+import type { DriftState } from '@/lib/drift'
 
 interface Props {
   driftPct: number
-  driftThreshold: number
-}
-
-type DriftState = 'green' | 'yellow' | 'red'
-
-function getDriftState(driftPct: number, threshold: number): DriftState {
-  const abs = Math.abs(driftPct)
-  if (abs > threshold) return 'red'
-  if (abs > threshold * 0.5) return 'yellow'
-  return 'green'
+  driftState: DriftState
 }
 
 const STATE_STYLES: Record<DriftState, string> = {
@@ -28,15 +20,14 @@ const STATE_ICONS: Record<DriftState, React.ReactNode> = {
   red: <AlertCircle className="h-3 w-3" aria-hidden="true" />,
 }
 
-export function DriftBadge({ driftPct, driftThreshold }: Props) {
-  const state = getDriftState(driftPct, driftThreshold)
+export function DriftBadge({ driftPct, driftState }: Props) {
   const label = formatNumber(driftPct, 'drift')
   return (
     <span
-      className={STATE_STYLES[state]}
+      className={STATE_STYLES[driftState]}
       aria-label={`Drift ${label}`}
     >
-      {STATE_ICONS[state]}
+      {STATE_ICONS[driftState]}
       {label}
     </span>
   )
