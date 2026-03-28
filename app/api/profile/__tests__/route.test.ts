@@ -158,4 +158,44 @@ describe('PATCH /api/profile', () => {
     const body = await res.json()
     expect(body.error.code).toBe('NO_FIELDS')
   })
+
+  // STORY-014 AC1: InnovestX equity credentials are encrypted and stored
+  it('encrypts innovestx_key and innovestx_secret and returns 200 (AC1)', async () => {
+    vi.stubEnv('ENCRYPTION_KEY', 'a'.repeat(64))
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+
+    const updatedRow = { ...profileRow, innovestx_key_enc: 'encrypted-key', innovestx_secret_enc: 'encrypted-secret' }
+    const mockUpdate = vi.fn().mockReturnThis()
+    const mockEqAfterUpdate = vi.fn().mockResolvedValue({ error: null })
+
+    mockProfileSelect
+      // First call: update
+      .mockReturnValueOnce({
+        update: mockUpdate,
+        eq: mockEqAfterUpdate,
+      })
+      // Second call: re-fetch after update
+      .mockReturnValueOnce({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: updatedRow, error: null }),
+      })
+
+    mockSiloCount.mockReturnValue(countChain(0))
+    mockNotifCount.mockReturnValue(countChain(0))
+
+    const req = new Request('http://localhost/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ innovestx_key: 'my-app-id', innovestx_secret: 'my-app-secret' }),
+    })
+    const res = await PATCH(req)
+    expect(res.status).toBe(200)
+    // Ensure the encrypted key was passed to update (not plaintext)
+    const updateCallArg = mockUpdate.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(updateCallArg).toHaveProperty('innovestx_key_enc')
+    expect(updateCallArg).toHaveProperty('innovestx_secret_enc')
+    expect(updateCallArg.innovestx_key_enc).not.toBe('my-app-id')
+    expect(updateCallArg.innovestx_secret_enc).not.toBe('my-app-secret')
+  })
 })

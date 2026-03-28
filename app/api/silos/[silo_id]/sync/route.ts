@@ -12,6 +12,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/encryption'
 import { buildBitkubSignature, parseBitkubTicker, parseBitkubWallet } from '@/lib/bitkub'
+import {
+  buildSettradeBasicAuth,
+  parseSettradePortfolio,
+  SETTRADE_BASE_URL,
+  SETTRADE_TOKEN_PATH,
+  SETTRADE_ACCOUNTS_PATH,
+  SETTRADE_PORTFOLIO_PATH,
+} from '@/lib/innovestx'
+import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -90,6 +99,10 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
   // Route to the correct broker sync handler
   if (silo.platform_type === 'bitkub') {
     return syncBitkub(supabase, user.id, silo_id)
+  }
+
+  if (silo.platform_type === 'innovestx') {
+    return syncInnovestxEquity(supabase, user.id, silo_id)
   }
 
   if (silo.platform_type !== 'alpaca') {
@@ -473,5 +486,226 @@ async function syncBitkub(
     holdings_updated: holdingsUpdated,
     cash_balance: thbBalance,
     platform: 'bitkub',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// INNOVESTX sync — STORY-014 (Settrade equity branch)
+// AC5: fetch Thai stock portfolio via Settrade OAuth, upsert holdings
+// AC6: fetch Finnhub prices for Thai equity assets
+// AC8: update last_synced_at
+// AC9: partial result with sync_warnings when equity creds missing
+// AC10: all Settrade/Finnhub HTTP calls are server-side only (CLAUDE.md Rule 5)
+// ---------------------------------------------------------------------------
+
+interface SettradeTokenResponse {
+  access_token: string
+  token_type: string
+}
+
+interface SettradeAccount {
+  account_no: string
+  [key: string]: unknown
+}
+
+async function syncInnovestxEquity(
+  supabase: SupabaseClient,
+  userId: string,
+  siloId: string,
+): Promise<NextResponse> {
+  const encKey = process.env.ENCRYPTION_KEY
+  if (!encKey) {
+    return NextResponse.json(
+      { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+      { status: 500 },
+    )
+  }
+
+  // 1. Fetch encrypted Settrade credentials
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('innovestx_key_enc, innovestx_secret_enc')
+    .eq('id', userId)
+    .single()
+
+  // AC9: equity creds missing → return partial result with sync_warnings
+  if (!profile?.innovestx_key_enc || !profile?.innovestx_secret_enc) {
+    const syncedAt = new Date().toISOString()
+    await supabase
+      .from('silos')
+      .update({ last_synced_at: syncedAt })
+      .eq('id', siloId)
+      .eq('user_id', userId)
+
+    return NextResponse.json({
+      synced_at: syncedAt,
+      holdings_updated: 0,
+      platform: 'innovestx',
+      sync_warnings: ['Settrade equity credentials not configured — equity sync skipped'],
+    })
+  }
+
+  let settradeAppId: string
+  let settradeAppSecret: string
+  try {
+    settradeAppId = decrypt(profile.innovestx_key_enc, encKey)
+    settradeAppSecret = decrypt(profile.innovestx_secret_enc, encKey)
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'DECRYPTION_FAILED', message: 'Failed to decrypt Settrade credentials' } },
+      { status: 500 },
+    )
+  }
+
+  // 2. Authenticate with Settrade (OAuth 2.0 client_credentials)
+  const basicAuth = buildSettradeBasicAuth(settradeAppId, settradeAppSecret)
+
+  let accessToken: string
+  try {
+    const tokenRes = await fetch(`${SETTRADE_BASE_URL}${SETTRADE_TOKEN_PATH}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basicAuth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: 'grant_type=client_credentials',
+      cache: 'no-store',
+    })
+    if (!tokenRes.ok) {
+      throw new Error(`Settrade auth returned ${tokenRes.status}`)
+    }
+    const tokenData = (await tokenRes.json()) as SettradeTokenResponse
+    accessToken = tokenData.access_token
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'Settrade authentication failed' } },
+      { status: 503 },
+    )
+  }
+
+  // 3. Fetch account list to get account_no
+  let accountNo: string
+  try {
+    const accountsRes = await fetch(`${SETTRADE_BASE_URL}${SETTRADE_ACCOUNTS_PATH}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      cache: 'no-store',
+    })
+    if (!accountsRes.ok) {
+      throw new Error(`Settrade accounts returned ${accountsRes.status}`)
+    }
+    const accountsData = (await accountsRes.json()) as SettradeAccount[]
+    if (!accountsData.length) {
+      return NextResponse.json(
+        { error: { code: 'BROKER_UNAVAILABLE', message: 'No Settrade accounts found' } },
+        { status: 503 },
+      )
+    }
+    accountNo = accountsData[0].account_no
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'Settrade accounts endpoint unreachable' } },
+      { status: 503 },
+    )
+  }
+
+  // 4. Fetch portfolio for the account
+  let rawPortfolio: unknown
+  try {
+    const portfolioRes = await fetch(
+      `${SETTRADE_BASE_URL}${SETTRADE_PORTFOLIO_PATH(accountNo)}`,
+      {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        cache: 'no-store',
+      },
+    )
+    if (!portfolioRes.ok) {
+      throw new Error(`Settrade portfolio returned ${portfolioRes.status}`)
+    }
+    rawPortfolio = await portfolioRes.json()
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'BROKER_UNAVAILABLE', message: 'Settrade portfolio endpoint unreachable' } },
+      { status: 503 },
+    )
+  }
+
+  // 5. Parse portfolio → upsert holdings
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const positions = parseSettradePortfolio(rawPortfolio as any)
+  const syncedAt = new Date().toISOString()
+  let holdingsUpdated = 0
+
+  for (const pos of positions) {
+    // Find or create asset record (unique on ticker + price_source)
+    const { data: existingAsset } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', pos.ticker)
+      .eq('price_source', 'finnhub')
+      .maybeSingle()
+
+    let assetId: string
+    if (existingAsset) {
+      assetId = existingAsset.id
+    } else {
+      const { data: newAsset, error: assetErr } = await supabase
+        .from('assets')
+        .insert({
+          ticker: pos.ticker,
+          name: pos.ticker,
+          asset_type: 'stock',
+          price_source: 'finnhub',
+        })
+        .select('id')
+        .single()
+
+      if (assetErr || !newAsset) continue
+      assetId = newAsset.id
+    }
+
+    // Ensure asset_mapping exists (best-effort, ignore conflict)
+    await supabase
+      .from('asset_mappings')
+      .upsert(
+        { silo_id: siloId, asset_id: assetId, local_label: pos.ticker },
+        { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
+      )
+
+    // Upsert holding with source='innovestx_sync'
+    const { error: holdingErr } = await supabase
+      .from('holdings')
+      .upsert(
+        {
+          silo_id: siloId,
+          asset_id: assetId,
+          quantity: pos.quantity,
+          cash_balance: '0',
+          source: 'innovestx_sync',
+          last_updated_at: syncedAt,
+        },
+        { onConflict: 'silo_id,asset_id' },
+      )
+
+    if (!holdingErr) holdingsUpdated++
+
+    // AC6: Fetch Finnhub price for this Thai equity — use stale cache on failure
+    try {
+      await fetchPrice(supabase, assetId, pos.ticker, 'finnhub')
+    } catch {
+      // Price fetch failure is non-fatal — stale cache remains
+    }
+  }
+
+  // 6. AC8: update silo.last_synced_at
+  await supabase
+    .from('silos')
+    .update({ last_synced_at: syncedAt })
+    .eq('id', siloId)
+    .eq('user_id', userId)
+
+  return NextResponse.json({
+    synced_at: syncedAt,
+    holdings_updated: holdingsUpdated,
+    platform: 'innovestx',
   })
 }

@@ -26,11 +26,13 @@ vi.mock('next/server', async (importOriginal) => {
 // Mock ENCRYPTION_KEY env var
 vi.stubEnv('ENCRYPTION_KEY', 'a'.repeat(64))
 
-// Pre-encrypt a test key using the same key so decrypt works in happy path
+// Pre-encrypt test keys using the same key so decrypt works in happy paths
 import { encrypt } from '@/lib/encryption'
 const TEST_ENC_KEY = 'a'.repeat(64)
 const MOCK_ALPACA_KEY_ENC = encrypt('PKTEST123', TEST_ENC_KEY)
 const MOCK_ALPACA_SECRET_ENC = encrypt('SKTEST456', TEST_ENC_KEY)
+const MOCK_INVX_KEY_ENC = encrypt('SETTRADE_APP_ID', TEST_ENC_KEY)
+const MOCK_INVX_SECRET_ENC = encrypt('SETTRADE_APP_SECRET', TEST_ENC_KEY)
 
 const mockGetUser = vi.fn()
 
@@ -243,5 +245,129 @@ describe('POST /api/silos/:silo_id/sync', () => {
     expect(body.platform).toBe('alpaca')
     expect(body.cash_balance).toBe('500.00')
     expect(typeof body.synced_at).toBe('string')
+  })
+})
+
+// ── InnovestX equity sync tests ───────────────────────────────────────────────
+
+describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+  })
+
+  function makeInnovestxSiloMock(profileData: Record<string, unknown>) {
+    return (table: string) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'innovestx' }, error: null })
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { select: vi.fn().mockReturnValue(selectChain), update: vi.fn().mockReturnValue(upd) }
+      }
+      if (table === 'user_profiles') {
+        return { select: vi.fn().mockReturnValue(eqChain({ data: profileData, error: null })) }
+      }
+      if (table === 'assets') {
+        const mb: Record<string, unknown> = {}
+        mb.eq = vi.fn().mockReturnValue(mb)
+        mb.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null })
+        const ins = { select: vi.fn().mockReturnValue(singleChain({ id: 'asset-uuid-1' })) }
+        return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
+      }
+      if (table === 'asset_mappings') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'holdings') {
+        const upd: Record<string, unknown> = {}
+        upd.eq = vi.fn().mockReturnValue(upd)
+        Object.assign(upd, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+      }
+      if (table === 'price_cache_fresh') {
+        // Return stale so fetchPrice tries Finnhub
+        return { select: vi.fn().mockReturnValue(eqChain({ data: null, error: null })) }
+      }
+      if (table === 'price_cache') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      return {}
+    }
+  }
+
+  it('returns partial result with sync_warnings when equity credentials are missing (AC9)', async () => {
+    mockFromImpl = makeInnovestxSiloMock({
+      innovestx_key_enc: null,
+      innovestx_secret_enc: null,
+    })
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('innovestx')
+    expect(body.holdings_updated).toBe(0)
+    expect(Array.isArray(body.sync_warnings)).toBe(true)
+    expect(body.sync_warnings.length).toBeGreaterThan(0)
+  })
+
+  it('returns 503 BROKER_UNAVAILABLE when Settrade auth fails (AC5)', async () => {
+    mockFromImpl = makeInnovestxSiloMock({
+      innovestx_key_enc: MOCK_INVX_KEY_ENC,
+      innovestx_secret_enc: MOCK_INVX_SECRET_ENC,
+    })
+    mockFetch.mockRejectedValue(new Error('Network error'))
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error.code).toBe('BROKER_UNAVAILABLE')
+  })
+
+  it('returns 200 with holdings_updated count on success (AC5, AC6, AC8)', async () => {
+    mockFromImpl = makeInnovestxSiloMock({
+      innovestx_key_enc: MOCK_INVX_KEY_ENC,
+      innovestx_secret_enc: MOCK_INVX_SECRET_ENC,
+    })
+
+    // Settrade: token → accounts → portfolio | Finnhub: price
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: 'tok-abc', token_type: 'Bearer' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ account_no: 'ACC001' }] })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          portfolioList: [
+            { symbol: 'PTT', volume: 100, marketValue: 42000 },
+            { symbol: 'KBANK', volume: 50, marketValue: 6750 },
+          ],
+        }),
+      })
+      // Finnhub price calls (one per holding)
+      .mockResolvedValue({ ok: true, json: async () => ({ c: 420 }) })
+
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.platform).toBe('innovestx')
+    expect(body.holdings_updated).toBe(2)
+    expect(typeof body.synced_at).toBe('string')
+  })
+
+  it('returns 200 with 0 holdings when portfolio is empty', async () => {
+    mockFromImpl = makeInnovestxSiloMock({
+      innovestx_key_enc: MOCK_INVX_KEY_ENC,
+      innovestx_secret_enc: MOCK_INVX_SECRET_ENC,
+    })
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: 'tok-abc', token_type: 'Bearer' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ account_no: 'ACC001' }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ portfolioList: [] }) })
+
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.holdings_updated).toBe(0)
   })
 })

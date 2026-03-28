@@ -104,6 +104,23 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // InnovestX equity credentials (Settrade App ID + App Secret) — STORY-014
+  // AC1: encrypt and store in innovestx_key_enc / innovestx_secret_enc
+  if ('innovestx_key' in body || 'innovestx_secret' in body) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    if ('innovestx_key' in body && typeof body.innovestx_key === 'string' && body.innovestx_key.length > 0) {
+      allowed.innovestx_key_enc = encrypt(body.innovestx_key, encKey)
+    }
+    if ('innovestx_secret' in body && typeof body.innovestx_secret === 'string' && body.innovestx_secret.length > 0) {
+      allowed.innovestx_secret_enc = encrypt(body.innovestx_secret, encKey)
+    }
+  }
+
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })
   }
