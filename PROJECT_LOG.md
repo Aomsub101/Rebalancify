@@ -39,6 +39,27 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-011 — Rebalancing wizard execute API route (Alpaca + manual)
+**Completed:** 2026-03-28
+**Effort:** 0.25 day (estimated 1d)
+
+**What was built:**
+- `app/api/silos/[silo_id]/rebalance/execute/route.ts` — execute endpoint: Alpaca order submission (POST /v2/orders), `alpaca_order_id` storage, session status machine ('approved'/'partial'/'cancelled'), manual silo path marks orders as 'manual', F1-R10 UPDATE exception for `status` + `snapshot_after`
+- `app/api/silos/[silo_id]/rebalance/execute/__tests__/route.test.ts` — 8 TDD integration tests: 401 unauth, 404 silo, 404 SESSION_NOT_FOUND, manual happy path, Alpaca happy path, Alpaca partial failure, all-skipped cancelled, 403 ALPACA_NOT_CONNECTED
+
+**Decisions made:**
+- Orders submitted sequentially (not parallel) to avoid Alpaca rate limits and allow per-order failure tracking
+- `snapshot_after` populated with `{ executed_at }` minimal JSON for Alpaca sessions; NULL stays for non-Alpaca (F1-R10)
+- `executed_count` counts only Alpaca-executed orders; manual approvals are not counted in `executed_count` (manual silos have no execution tracking)
+
+**Discovered issues / carry-over notes:**
+- STORY-011b (wizard UI) is now unblocked — it needs TanStack Query mutation calling this endpoint, and must invalidate `['holdings', siloId]` and `['sessions', siloId]` on success (AC10)
+- The `assets` table lookup to resolve tickers for Alpaca orders assumes asset records exist from sync; if a session is calculated on stale data after asset deletion, the ticker lookup may miss — acceptable edge case for v1.0
+
+**Quality gates passed:** type-check ✅ | test ✅ (147/147) | build ✅ | RLS ✅ | security ✅
+
+---
+
 ### STORY-010b — Rebalance calculator (full mode, pre-flight, cash injection)
 **Completed:** 2026-03-28
 **Effort:** 0.25 day (estimated 2d)
