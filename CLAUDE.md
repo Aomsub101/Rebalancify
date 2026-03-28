@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-05 — Drift & Overview
-**Active Story:** STORY-017 — Drift calculation endpoint + DriftBadge component
-**Last Completed:** STORY-016 — Webull sync + full broker settings UI (2026-03-28)
+**Active Story:** STORY-018 — FX rates endpoint + USD conversion toggle
+**Last Completed:** STORY-017 — Drift calculation endpoint + DriftBadge component (2026-03-28)
 
 Update this section manually as stories are completed. Format:
 ```

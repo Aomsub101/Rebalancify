@@ -39,6 +39,32 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-017 — Portfolio Drift Calculation & Indicator
+**Completed:** 2026-03-28
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `lib/drift.ts` — pure `computeDriftState(driftPct, threshold): DriftState`; green/yellow/red using correct AC3 thresholds (green ≤ t, yellow t < abs ≤ t+2, red abs > t+2); 100% coverage
+- `lib/drift.test.ts` — 13 TDD tests (Red→Green) covering all three states, boundary values, negative drift, custom thresholds
+- `app/api/silos/[silo_id]/drift/route.ts` — GET endpoint: ownership check (RLS), live computation from `price_cache + holdings + target_weights`, returns `drift_pct`, `drift_state`, `drift_breached` per asset; nothing stored
+- `app/api/silos/[silo_id]/drift/__tests__/route.test.ts` — 8 route tests: 401, 404, green/yellow/red states, custom threshold, negative drift sign
+- `components/shared/DriftBadge.tsx` — updated to accept `driftState: DriftState` prop (from API) instead of computing state locally with old wrong formula
+- `app/api/silos/[silo_id]/holdings/route.ts` — added `drift_state` field per holding using `computeDriftState`
+- `lib/types/holdings.ts` — added `drift_state: 'green' | 'yellow' | 'red'` to `Holding` type
+- `components/silo/HoldingRow.tsx`, `HoldingsTable.tsx`, `SiloDetailView.tsx` — removed `driftThreshold` prop chain; DriftBadge now receives `driftState` from holding data
+
+**Decisions made:**
+- `drift_state` added to the holdings response (not just the dedicated drift endpoint) so `HoldingRow` gets it without a second API call
+- Old DriftBadge used `threshold * 0.5` heuristic which was wrong per AC3 spec; replaced with `computeDriftState` from lib
+- `PATCH /api/silos/:id` already handled `drift_threshold` (no change needed — AC4 was pre-satisfied)
+
+**Discovered issues / carry-over notes:**
+- None — drift endpoint is straightforward live computation with no external dependencies
+
+**Quality gates passed:** type-check ✅ | test ✅ (281/281) | build ✅ | RLS ✅ | no drift_history ✅
+
+---
+
 ### STORY-016 — Webull Sync & Settings Page Consolidation
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 2d)
