@@ -19,7 +19,6 @@ this file wins. If CLAUDE.md conflicts on *code rules*, CLAUDE.md wins.
 │  1. ORIENT (every session, no exceptions)                        │
 │     Run `bd prime` → loads task state and context               │
 │     Run `bd ready` → confirms which stories are unblocked       │
-│     Read KICKSTART.md                                            │
 │     Read CLAUDE.md completely                                    │
 │     Read PROGRESS.md → find the first story row marked ⬜        │
 │     Cross-check: PROGRESS.md and bd ready must agree on next    │
@@ -138,12 +137,12 @@ If a session was interrupted mid-story:
 
 **Never skip. Never bypass. Never "I'll fix it in the next story."**
 
-| Command | Must Show | Action if Fails |
-|---------|-----------|-----------------|
-| `pnpm type-check` | 0 TypeScript errors | Fix type errors before proceeding |
-| `pnpm test` | 0 failures, 0 errors | Fix failing tests before proceeding |
-| `pnpm test:coverage` | Coverage meets minimums (see testing doc) | Add missing tests |
-| `pnpm build` | Compiled successfully, 0 errors | Fix build errors before proceeding |
+| Command                | Must Show                                 | Action if Fails                     |
+| ---------------------- | ----------------------------------------- | ----------------------------------- |
+| `pnpm type-check`    | 0 TypeScript errors                       | Fix type errors before proceeding   |
+| `pnpm test`          | 0 failures, 0 errors                      | Fix failing tests before proceeding |
+| `pnpm test:coverage` | Coverage meets minimums (see testing doc) | Add missing tests                   |
+| `pnpm build`         | Compiled successfully, 0 errors           | Fix build errors before proceeding  |
 
 Run all four in sequence. Only commit when all four are clean.
 
@@ -202,18 +201,18 @@ If a workaround is the only option, describe it explicitly and ask for approval.
 
 ## Section 7 — Story Type Quick Reference
 
-| Story involves... | Extra steps |
-|-------------------|-------------|
-| Database schema change | Run migration locally first; verify RLS before Quality Gate |
-| New API route | Test unauthenticated (401) + happy path + error case + RLS isolation |
-| Broker API keys (EPIC-03, EPIC-04, EPIC-09) | Manual security test: zero browser requests to external API |
-| UI component | Verify light + dark mode; verify 375px + 1280px; verify focus rings |
-| pg_cron job | Test by running the SQL manually in Supabase SQL Editor |
-| Vercel Cron Job | Test by curling the endpoint with CRON_SECRET header |
-| Phase completion | Run Lighthouse CI on Vercel preview URL |
-| Any conflict between two docs | Look up `CONFLICT_RESOLVER.md` Section 1 — Authority Hierarchy |
-| Any runtime error blocking progress | Look up `CONFLICT_RESOLVER.md` Section 3 — Runtime Error Resolution |
-| Starting a new session | `bd prime` then `bd ready` before reading any story file |
-| Claiming a task | `bd update <id> --claim` after reading the story, before writing code |
-| Completing a task | `bd close <id> "<note>"` as first action in Step 7 |
-| Discovering a new dependency | `bd dep add <child> <parent>` immediately, before continuing |
+| Story involves...                           | Extra steps                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| Database schema change                      | Run migration locally first; verify RLS before Quality Gate             |
+| New API route                               | Test unauthenticated (401) + happy path + error case + RLS isolation    |
+| Broker API keys (EPIC-03, EPIC-04, EPIC-09) | Manual security test: zero browser requests to external API             |
+| UI component                                | Verify light + dark mode; verify 375px + 1280px; verify focus rings     |
+| pg_cron job                                 | Test by running the SQL manually in Supabase SQL Editor                 |
+| Vercel Cron Job                             | Test by curling the endpoint with CRON_SECRET header                    |
+| Phase completion                            | Run Lighthouse CI on Vercel preview URL                                 |
+| Any conflict between two docs               | Look up `CONFLICT_RESOLVER.md` Section 1 — Authority Hierarchy       |
+| Any runtime error blocking progress         | Look up `CONFLICT_RESOLVER.md` Section 3 — Runtime Error Resolution  |
+| Starting a new session                      | `bd prime` then `bd ready` before reading any story file            |
+| Claiming a task                             | `bd update <id> --claim` after reading the story, before writing code |
+| Completing a task                           | `bd close <id> "<note>"` as first action in Step 7                    |
+| Discovering a new dependency                | `bd dep add <child> <parent>` immediately, before continuing          |
