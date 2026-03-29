@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-028 — Onboarding Modal & Progress Banner
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `components/shared/OnboardingModal.tsx` — 7-platform card selector, non-dismissible (ESC + backdrop blocked), calls `POST /api/silos` with per-platform payload then `PATCH /api/profile {onboarded:true}`, navigates to new silo on success; Skip flow marks onboarded without creating silo
+- `components/shared/ProgressBanner.tsx` — 3-step reactive banner (holdings/weights/rebalance); X dismiss → `PATCH /api/profile {progress_banner_dismissed:true}`; steps driven by TanStack Query cache
+- `components/shared/OnboardingGate.tsx` — client wrapper placed inside `(dashboard)/layout.tsx` `<main>`; gates modal vs banner on `onboarded`, `siloCount`, `progressBannerDismissed` from SessionContext
+- `contexts/SessionContext.tsx` — added `onboarded`, `progressBannerDismissed`, `refreshProfile()`, `setSiloCount()` to context interface and provider
+- 22 new component tests across 3 test files; all 436 tests pass
+
+**Decisions made:**
+- No new migration or API route changes needed — `onboarded`/`progress_banner_dismissed` columns already existed in `02_user_profiles.sql`; `PATCH /api/profile` already handled both fields
+- `OnboardingGate` placed inside `<main>` (not above it) so the progress banner scrolls with page content and does not overlap TopBar/OfflineBanner
+- DIME uses `platform_type: 'manual'` per AC-3; PlatformBadge shows "DIME" via silo `name` field (not `platform_type`)
+- Progress banner step 2 completeness derived from `weights_sum_pct > 0` from cached `GET /api/silos` response — no extra query needed
+
+**Discovered issues / carry-over notes:**
+- None — clean implementation; all AC verified
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅
+
+---
+
 ### STORY-027 — PWA & Offline Support
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 2d)

@@ -117,7 +117,7 @@
 | Story     | Title                               | Status | Completed |
 | --------- | ----------------------------------- | ------ | --------- |
 | STORY-027 | PWA config + offline detection      | ✅     | 2026-03-29 |
-| STORY-028 | Onboarding modal + progress banner  | ⬜     | —        |
+| STORY-028 | Onboarding modal + progress banner  | ✅     | 2026-03-29 |
 | STORY-029 | Performance audit (all NFR targets) | ⬜     | —        |
 
 ---

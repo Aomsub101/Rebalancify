@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-08 — PWA & Polish
-**Active Story:** STORY-028 — Onboarding modal + progress banner
-**Last Completed:** STORY-027 — PWA config + offline detection (2026-03-29)
+**Active Story:** STORY-029 — Performance audit (all NFR targets)
+**Last Completed:** STORY-028 — Onboarding modal + progress banner (2026-03-29)
 
 Update this section manually as stories are completed. Format:
 ```
