@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AlpacaLiveBadge } from '@/components/shared/AlpacaLiveBadge'
+import type { DriftAsset } from '@/components/overview/PortfolioSummaryCard'
 
 export interface SiloCardData {
   id: string
@@ -42,9 +44,15 @@ interface SiloCardProps {
    * If undefined when showUSD=true, falls back to base_currency display.
    */
   usdRate?: number
+  /**
+   * Drift assets for this silo from GET /api/silos/:id/drift.
+   * Used to render DriftStatusSummary (AC-4).
+   * Undefined while drift data is still loading.
+   */
+  driftData?: DriftAsset[]
 }
 
-export function SiloCard({ silo, showUSD = false, usdRate }: SiloCardProps) {
+export function SiloCard({ silo, showUSD = false, usdRate, driftData }: SiloCardProps) {
   const isAlpacaLive = silo.platform_type === 'alpaca' && silo.alpaca_mode === 'live'
   const platformLabel = PLATFORM_LABELS[silo.platform_type] ?? silo.platform_type
   const badgeColor = PLATFORM_BADGE_COLORS[silo.platform_type] ?? PLATFORM_BADGE_COLORS.manual
@@ -55,6 +63,18 @@ export function SiloCard({ silo, showUSD = false, usdRate }: SiloCardProps) {
   const displayValue = useConvertedUSD ? rawValue * usdRate : rawValue
   const displayCurrency = useConvertedUSD ? 'USD' : silo.base_currency
   const isEmpty = silo.total_value === '0.00000000'
+
+  // AC-4: ExecutionModeTag — AUTO only for Alpaca in v1.0, MANUAL for all others
+  const executionMode = silo.platform_type === 'alpaca' ? 'AUTO' : 'MANUAL'
+  const executionModeColor =
+    silo.platform_type === 'alpaca'
+      ? 'bg-positive-bg text-positive'
+      : 'bg-secondary text-muted-foreground'
+
+  // AC-4: DriftStatusSummary
+  const hasDriftData = driftData !== undefined
+  const breachedCount = driftData?.filter((a) => a.drift_breached).length ?? 0
+  const allWithin = hasDriftData && breachedCount === 0
 
   return (
     <Link
@@ -73,14 +93,25 @@ export function SiloCard({ silo, showUSD = false, usdRate }: SiloCardProps) {
           {/* CLAUDE.md Rule 15: LIVE badge is always visible for Alpaca live mode */}
           {isAlpacaLive && <AlpacaLiveBadge />}
         </div>
-        <span
-          className={cn(
-            'shrink-0 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide',
-            badgeColor,
-          )}
-        >
-          {platformLabel}
-        </span>
+        {/* Platform badge + ExecutionMode tag (AC-4) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide',
+              badgeColor,
+            )}
+          >
+            {platformLabel}
+          </span>
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wide',
+              executionModeColor,
+            )}
+          >
+            {executionMode}
+          </span>
+        </div>
       </div>
 
       {/* Total value — AC-6: base_currency when off; AC-7: USD when on */}
@@ -92,6 +123,27 @@ export function SiloCard({ silo, showUSD = false, usdRate }: SiloCardProps) {
       <p className="text-xs text-muted-foreground mt-0.5">
         {useConvertedUSD ? 'Total value (USD)' : 'Total value'}
       </p>
+
+      {/* DriftStatusSummary (AC-4) */}
+      {hasDriftData && (
+        <div className="mt-3 flex items-center gap-1.5">
+          {allWithin ? (
+            <>
+              {/* Rule 13: icon alongside colour */}
+              <CheckCircle2 className="h-3.5 w-3.5 text-positive shrink-0" aria-hidden="true" />
+              <span className="text-xs text-positive">All within threshold</span>
+            </>
+          ) : (
+            <>
+              {/* Rule 13: AlertCircle icon for colour-blind users */}
+              <AlertCircle className="h-3.5 w-3.5 text-negative shrink-0" aria-hidden="true" />
+              <span className="text-xs text-negative">
+                {breachedCount} asset{breachedCount === 1 ? '' : 's'} breached
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
