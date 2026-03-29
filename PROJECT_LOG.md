@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-025 — Top Movers Endpoint
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `app/api/market/top-movers/route.ts` — GET handler: FMP `/gainers`+`/losers` primary for stocks; Finnhub `/scan/technical-indicator` (two sorted calls) as secondary; CoinGecko `/coins/markets` for crypto; stale `price_cache` fallback when all sources fail
+- `app/api/market/top-movers/__tests__/route.test.ts` — 10 TDD tests (Red→Green)
+
+**Decisions made:**
+- FMP is primary for stocks (has dedicated gainers/losers endpoints on free tier); Finnhub is secondary (screener endpoint, 2 calls sorted desc/asc)
+- CoinGecko uses `order=price_change_percentage_24h_desc/asc` to get gainers/losers in one call each (no API key required)
+- Stale fallback returns `stale: true` with `change_pct: 0` (no daily change data in `price_cache`)
+- `change_pct` formatted to 3dp; `price` formatted to 8dp string — consistent with API contract conventions
+
+**Discovered issues / carry-over notes:**
+- Finnhub free tier `/scan/technical-indicator` may not support `sort` query param; real response may need client-side sort (test mocks pass, production may need adjustment)
+- STORY-026 UI is responsible for colour (green/red) + non-colour icon signals (AC-5 is UI concern)
+
+**Quality gates passed:** type-check ✅ | test ✅ (396/396) | build ✅ | RLS ✅ (price_cache USING(TRUE))
+
+---
+
 ### STORY-024 — Peer Assets Endpoint
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 1d)
