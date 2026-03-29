@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-021 — News Fetch Service & Cache
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 2d — pure service layer, no UI, migrations already in place)
+
+**What was built:**
+- `lib/newsService.ts` — pure functions: `parseFinnhubArticle`, `parseFmpArticle`, `deduplicateArticles`, `fetchFinnhubNews` (handles 429 → rateLimited, per-ticker loop stops on first 429), `fetchFmpNews` (handles non-2xx as failed)
+- `lib/newsService.test.ts` — 29 TDD tests (Red→Green): all parsers, dedup, rate-limit 429, network errors, non-429 error skip-and-continue, macro vs portfolio paths
+- `app/api/news/refresh/route.ts` — POST handler: 15-min guard (MAX fetched_at query), parallel Finnhub+FMP fetch, dedup, upsert `news_cache` on `external_id`, graceful fallback to cache when both sources fail
+- `app/api/news/articles/[article_id]/state/route.ts` — PATCH handler: upserts `user_article_state` by `(user_id, article_id)`, accepts `is_read`/`is_dismissed`
+
+**Decisions made:**
+- `externalId` for FMP articles uses `fmp-<url>` (FMP free tier has no stable numeric article ID)
+- Finnhub per-ticker calls cover last 30 days; loop breaks immediately on 429 and returns accumulated articles so far
+- Service-role client used for `news_cache` writes (globally readable table, RLS allows SELECT for all authenticated users, writes are service-only)
+- pg_cron purge job (AC-4) confirmed in migration 18 from STORY-001 — no new migration needed
+
+**Discovered issues / carry-over notes:**
+- `FINNHUB_API_KEY` and `FMP_API_KEY` env vars required — both noted in `.env.local` template and `docs/development/01-dev-environment.md`
+- STORY-022 needs to add `metadata JSONB` to `news_cache` for Tier-2 enrichment tags (sector, related terms) — schema not modified here
+
+**Quality gates passed:** type-check ✅ | test ✅ (340/340) | coverage ✅ (newsService.ts 97.72%) | build ✅
+
+---
+
 ### STORY-020 — Daily Drift Digest via Vercel Cron + Resend
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 2d — focused scope ran fast; migrations already in place)
