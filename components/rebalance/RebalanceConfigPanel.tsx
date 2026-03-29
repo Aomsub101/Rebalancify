@@ -14,6 +14,8 @@ import { WeightsSumWarning } from '@/components/silo/WeightsSumWarning'
 import { formatNumber } from '@/lib/formatNumber'
 import type { CalculateResponse } from '@/lib/types/rebalance'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 
 interface Props {
   siloId: string
@@ -27,6 +29,7 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
   const [cashAmount, setCashAmount] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { isOnline } = useOnlineStatus()
 
   const weightsSum = initialWeightsSum
   const cashTargetPct = Math.max(0, 100 - weightsSum)
@@ -197,14 +200,34 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
         >
           ← Back to silo
         </Link>
-        <button
-          onClick={handleCalculate}
-          disabled={isCalculating}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {isCalculating ? 'Calculating…' : 'Calculate orders'}
-          {!isCalculating && <ChevronRight className="h-4 w-4" aria-hidden="true" />}
-        </button>
+        {/* Tooltip wrapper for offline state (STORY-027 AC-5) */}
+        <div className="relative group">
+          <span className={cn(!isOnline && 'cursor-not-allowed')}>
+            <button
+              onClick={handleCalculate}
+              disabled={isCalculating || !isOnline}
+              aria-label={isOnline ? undefined : 'Unavailable offline'}
+              className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
+                'bg-primary text-primary-foreground hover:bg-primary/90',
+                'disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                !isOnline && 'pointer-events-none',
+              )}
+            >
+              {isCalculating ? 'Calculating…' : 'Calculate orders'}
+              {!isCalculating && <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          </span>
+          {!isOnline && (
+            <div
+              role="tooltip"
+              className="absolute right-0 top-full mt-1 w-max rounded-md bg-popover border border-border px-2.5 py-1.5 text-xs text-muted-foreground shadow-md hidden group-hover:block pointer-events-none"
+            >
+              Unavailable offline
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

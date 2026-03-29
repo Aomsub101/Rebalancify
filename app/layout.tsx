@@ -20,6 +20,17 @@ export const metadata: Metadata = {
     default: 'Rebalancify',
   },
   description: 'Portfolio clarity for every platform.',
+  manifest: '/manifest.json',
+  themeColor: '#1E3A5F',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Rebalancify',
+  },
+  icons: {
+    icon: '/icons/icon-192.png',
+    apple: '/icons/icon-192.png',
+  },
 }
 
 export default function RootLayout({

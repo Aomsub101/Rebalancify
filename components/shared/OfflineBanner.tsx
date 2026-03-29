@@ -2,32 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { WifiOff } from 'lucide-react'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { formatRelativeTime } from '@/lib/formatRelativeTime'
 
 export function OfflineBanner() {
-  // SSR-safe: start as null (unknown), resolve on mount
-  const [isOnline, setIsOnline] = useState<boolean | null>(null)
+  // SSR-safe: avoid hydration mismatch by waiting for mount
+  const [mounted, setMounted] = useState(false)
+  const { isOnline, cachedAt } = useOnlineStatus()
 
   useEffect(() => {
-    setIsOnline(navigator.onLine)
-
-    function handleOnline() {
-      setIsOnline(true)
-    }
-    function handleOffline() {
-      setIsOnline(false)
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
+    setMounted(true)
   }, [])
 
-  // Render nothing until mounted (avoids SSR mismatch) or when online
-  if (isOnline === null || isOnline === true) return null
+  if (!mounted || isOnline) return null
 
   return (
     <div
@@ -37,7 +24,15 @@ export function OfflineBanner() {
     >
       {/* Non-colour signal (CLAUDE.md Rule 13): WifiOff icon + text */}
       <WifiOff className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span>You&apos;re offline — data may be stale</span>
+      <div className="flex flex-col gap-0.5">
+        <span>You&apos;re offline — data may be stale</span>
+        {/* AC-6: show relative timestamp of last cached data */}
+        {cachedAt && (
+          <span className="text-xs font-normal opacity-80">
+            Offline — showing data from {formatRelativeTime(cachedAt)}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
