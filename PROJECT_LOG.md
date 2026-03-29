@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-019 — Overview Page
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `components/overview/PortfolioSummaryCard.tsx` — three-stat card (total portfolio value w/ USD conversion, active silo count [X/5], unique asset count from aggregated drift data)
+- `components/overview/GlobalDriftBanner.tsx` — conditional red banner listing all breached assets across silos with DriftBadge + AlertCircle icon (Rule 13)
+- `components/silo/SiloCard.tsx` — added ExecutionModeTag (AUTO/MANUAL), DriftStatusSummary (X breached / all within threshold), `driftData` prop; STORY-018 `showUSD`+`usdRate` carry-over wired
+- `app/(dashboard)/overview/page.tsx` — full OverviewPage: `useQueries` for parallel per-silo drift fetching, silos list, FX rates (reuses `['fx-rates']` queryKey from TopBar); LoadingSkeleton, EmptyState + CTA, SiloCardGrid
+- `app/(dashboard)/overview/layout.tsx` — server layout to export metadata for the 'use client' page
+
+**Decisions made:**
+- Used `useQueries` (TanStack Query v5) for parallel drift fetches — avoids N+1 waterfall; drift data flows top-down to both GlobalDriftBanner and per-SiloCard DriftStatusSummary
+- Unique asset count computed from aggregated drift responses (avoids extra API endpoint)
+- EmptyState CTA button rendered outside the shared EmptyState component (EmptyState accepts no children)
+
+**Discovered issues / carry-over notes:**
+- `total_value` in GET /api/silos returns `'0.00000000'` (buildSiloResponse stub) — PortfolioSummaryCard will show zero until holdings are added; this is correct current behaviour
+- No new lib/ files → no TDD tests required; all quality gates pass on existing 295 tests
+
+**Quality gates passed:** type-check ✅ | test ✅ (295/295) | build ✅
+
+---
+
 ### STORY-018 — FX Rates Endpoint + USD Conversion Toggle
 **Completed:** 2026-03-28
 **Effort:** 0.5 day (estimated 0.5d)
