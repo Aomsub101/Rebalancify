@@ -97,7 +97,7 @@
 | Story     | Title                                         | Status | Completed |
 | --------- | --------------------------------------------- | ------ | --------- |
 | STORY-021 | News fetch service + cache (Finnhub + FMP)    | ✅     | 2026-03-29 |
-| STORY-022 | Portfolio news endpoint (two-tier matching)   | ⬜     | —        |
+| STORY-022 | Portfolio news endpoint (two-tier matching)   | ✅     | 2026-03-29 |
 | STORY-023 | News page UI (tabs, ArticleList, ArticleCard) | ⬜     | —        |
 
 ---

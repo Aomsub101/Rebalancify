@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-06 — News Feed
-**Active Story:** STORY-022 — Portfolio news endpoint (two-tier matching)
-**Last Completed:** STORY-021 — News fetch service + cache (Finnhub + FMP) (2026-03-29)
+**Active Story:** STORY-023 — News page UI (tabs, ArticleList, ArticleCard)
+**Last Completed:** STORY-022 — Portfolio news endpoint (two-tier matching) (2026-03-29)
 
 Update this section manually as stories are completed. Format:
 ```

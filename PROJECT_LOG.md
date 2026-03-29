@@ -39,6 +39,30 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-022 — Portfolio News & Macro News Endpoints
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `supabase/migrations/19_news_cache_metadata.sql` — adds `metadata JSONB` to `news_cache` for tier-2 enrichment tags
+- `lib/newsQueryService.ts` — pure functions: `splitIntoTiers` (tier-1 = tickers overlap, tier-2 = metadata.related_tickers overlap), `mergeAndRankArticles` (dedup, tier-1 first), `paginateArticles`
+- `lib/newsQueryService.test.ts` — 26 TDD tests (Red→Green)
+- `GET /api/news/portfolio` — two-tier matching, user_article_state join, pagination (7 tests)
+- `GET /api/news/macro` — is_macro=TRUE filter, state join, pagination (6 tests)
+
+**Decisions made:**
+- Tier-2 matching done in JS (not SQL) because news_cache is bounded by 24-hour TTL (~hundreds of rows); avoids complex JSONB SQL operators while keeping GIN index for tier-1 DB query
+- metadata JSONB shape: `{ sector, related_tickers, related_terms, personnel }` — `related_tickers` is the tier-2 match field
+- Supabase join returns related tables as arrays; cast via `unknown` then handle both array and object shapes
+
+**Discovered issues / carry-over notes:**
+- `metadata` column is NULL for all existing rows until the news refresh enrichment is implemented (STORY-023 or later)
+- STORY-023 (News page UI) can use `GET /api/news/portfolio?page=1&limit=20` and `GET /api/news/macro?page=1&limit=20` directly
+
+**Quality gates passed:** type-check ✅ | test ✅ (379/379) | build ✅ | RLS ✅ (user_article_state uses anon client with user JWT)
+
+---
+
 ### STORY-021 — News Fetch Service & Cache
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 2d — pure service layer, no UI, migrations already in place)
