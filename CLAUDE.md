@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-07 — Asset Discovery
-**Active Story:** STORY-024 — Peer assets endpoint (Finnhub + static fallback)
-**Last Completed:** STORY-023 — News page UI (tabs, ArticleList, ArticleCard) (2026-03-29)
+**Active Story:** STORY-025 — Top Movers endpoint (Finnhub/FMP + CoinGecko)
+**Last Completed:** STORY-024 — Peer assets endpoint (Finnhub + static fallback) (2026-03-29)
 
 Update this section manually as stories are completed. Format:
 ```

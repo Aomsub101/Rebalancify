@@ -39,6 +39,27 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-024 — Peer Assets Endpoint
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `app/api/assets/[asset_id]/peers/route.ts` — GET handler: resolves asset, calls Finnhub `/stock/peers`, falls back to `sector_taxonomy.json`, enriches with name + price from DB
+- `app/api/assets/[asset_id]/peers/__tests__/route.test.ts` — 7 TDD tests (Red→Green)
+
+**Decisions made:**
+- Finnhub fallback triggered on any error OR when result has < MIN_PEERS (5) tickers; ensures useful response even on partial Finnhub failures
+- `sector_taxonomy.json` was already present at project root with 12 sectors; imported via `@/sector_taxonomy.json` alias
+- Used `as unknown as Taxonomy` cast to satisfy TS strict mode (JSON has `_comment`/`_schema`/`_usage` string fields that don't match `Record<string, string[]>`)
+- Params typed as `Promise<{ asset_id: string }>` per Next.js 15 async params convention (matching existing routes)
+
+**Discovered issues / carry-over notes:**
+- Peers not registered in the `assets` table return minimal stubs (`name: ticker, price: "0.00000000"`); STORY-026 UI should handle gracefully
+
+**Quality gates passed:** type-check ✅ | test ✅ (386/386) | build ✅ | RLS ✅ (assets/price_cache USING(TRUE))
+
+---
+
 ### STORY-023 — News Page UI
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 1d)

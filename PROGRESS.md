@@ -106,7 +106,7 @@
 
 | Story     | Title                                            | Status | Completed |
 | --------- | ------------------------------------------------ | ------ | --------- |
-| STORY-024 | Peer assets endpoint (Finnhub + static fallback) | ⬜     | —        |
+| STORY-024 | Peer assets endpoint (Finnhub + static fallback) | ✅     | 2026-03-29 |
 | STORY-025 | Top Movers endpoint (Finnhub/FMP + CoinGecko)    | ⬜     | —        |
 | STORY-026 | Discover page UI                                 | ⬜     | —        |
 
