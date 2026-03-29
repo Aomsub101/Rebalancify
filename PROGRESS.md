@@ -88,7 +88,7 @@
 | STORY-017 | Drift calculation endpoint + DriftBadge component | ✅     | 2026-03-28 |
 | STORY-018 | FX rates endpoint + USD conversion toggle         | ✅     | 2026-03-28 |
 | STORY-019 | Overview page (SiloCardList + GlobalDriftBanner)  | ✅     | 2026-03-29 |
-| STORY-020 | Daily drift digest via Resend (pg_cron)           | ⬜     | —        |
+| STORY-020 | Daily drift digest via Resend (pg_cron)           | ✅     | 2026-03-29 |
 
 ---
 

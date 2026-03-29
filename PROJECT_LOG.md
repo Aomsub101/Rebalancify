@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-020 — Daily Drift Digest via Vercel Cron + Resend
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 2d — focused scope ran fast; migrations already in place)
+
+**What was built:**
+- `lib/driftDigest.ts` — pure helpers: `buildDriftDigestHtml()` (inline HTML email template with disclaimer), `escapeHtml()` (XSS prevention); 100% coverage
+- `lib/driftDigest.test.ts` — 16 TDD tests (Red→Green): template rendering, disclaimer presence, multi-item, empty list, HTML escaping for XSS
+- `app/api/cron/drift-digest/route.ts` — Vercel Cron handler: `CRON_SECRET` Bearer validation (401 on missing/wrong), service-role Supabase client, drift breach detection per silo, Resend email dispatch, graceful Resend failure (log + skip, no crash), Schwab token-expiry in-app notification insertion
+
+**Decisions made:**
+- Email delivery uses Vercel Cron Job (ADR-013 already established); pg_cron migration 17 handles in-app notifications only — confirmed both paths remain independent
+- Schwab token-expiry notifications added to same cron handler per STORY-020 Notes (avoids a separate cron job)
+- Service-role Supabase client created directly in the route (not via `createClient()` from `lib/supabase/server.ts`) — cron has no user session context; RLS bypass is intentional and correct here
+
+**Discovered issues / carry-over notes:**
+- `CRON_SECRET` added to `.env.local` with a generated value; must be added to Vercel project env vars before first production cron run
+- Resend `from` address uses `noreply@rebalancify.app` — requires domain verification in Resend dashboard before production use (pre-dev setup item in `01-dev-environment.md`)
+
+**Quality gates passed:** type-check ✅ | test ✅ (311/311) | coverage ✅ (driftDigest.ts 100%) | build ✅
+
+---
+
 ### STORY-019 — Overview Page
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 1d)

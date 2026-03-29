@@ -139,9 +139,9 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 
 ## 5. Current Build Phase
 
-**Active Epic:** EPIC-05 — Drift & Overview
-**Active Story:** STORY-020 — Daily drift digest via Resend (pg_cron)
-**Last Completed:** STORY-019 — Overview page (SiloCardList + GlobalDriftBanner) (2026-03-29)
+**Active Epic:** EPIC-06 — News Feed
+**Active Story:** STORY-021 — News fetch service + cache (Finnhub + FMP)
+**Last Completed:** STORY-020 — Daily drift digest via Resend (pg_cron) (2026-03-29)
 
 Update this section manually as stories are completed. Format:
 ```
