@@ -54,7 +54,7 @@ export function Sidebar() {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/login')
+    window.location.href = '/login'
   }
 
   function handleNavClick(href: string) {

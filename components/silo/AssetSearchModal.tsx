@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -100,6 +100,9 @@ export function AssetSearchModal({ siloId, open, onOpenChange }: Props) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Asset</DialogTitle>
+          <DialogDescription className="sr-only">
+            Search for stocks, ETFs, or crypto assets to add to this silo.
+          </DialogDescription>
         </DialogHeader>
 
         {/* TypeSelector */}
