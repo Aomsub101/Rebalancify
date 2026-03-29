@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-026 — Discover Page UI
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `app/(dashboard)/discover/layout.tsx` — server layout exporting `Discover | Rebalancify` metadata
+- `app/(dashboard)/discover/page.tsx` — `'use client'` page: TopMoversTabs (US Stocks/Crypto tabs), AssetPeerSearch (debounced 300ms input, dropdown, PeerCard grid), PortfolioDriftSummary (DriftBadge per asset per silo via parallel useQueries)
+- `components/discover/PeerCard.tsx` — hoverable card: ticker, name, price via formatNumber; no AiInsightTag
+- `components/discover/TopMoversTable.tsx` — two-column gainers/losers with TrendingUp/Down icons + green/red badges; stale data amber notice (AlertTriangle icon — secondary non-colour signal)
+- `app/api/assets/search/route.ts` — added `id: string | null` to response via batch `assets` table lookup by ticker (required for peers call; TDD with 2 new tests)
+
+**Decisions made:**
+- Modified `GET /api/assets/search` to include `id` — AC-3 requires `GET /api/assets/:id/peers` after search, but the endpoint had no `id` in response; added 1 DB call per search (batch IN query) to resolve
+- `id: null` for assets not yet tracked in DB — UI shows "no peers" empty state gracefully rather than error
+- Pre-fetched both movers tabs (stocks + crypto) to avoid loading flash on tab switch (same pattern as NewsPage)
+- Peer search type fixed to `stock` — Finnhub `/stock/peers` only supports equities; crypto peer discovery is v2.0
+
+**Discovered issues / carry-over notes:**
+- `AssetPeerSearch` only searches stocks in v1.0 (not crypto); a future story could add crypto peer discovery
+- Assets not yet in the DB return `id: null`; users must add an asset to a silo before peer search works for that ticker
+
+**Quality gates passed:** type-check ✅ | test ✅ (398/398) | build ✅ | AiInsightTag grep ✅ (0 DOM matches)
+
+---
+
 ### STORY-025 — Top Movers Endpoint
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 1d)

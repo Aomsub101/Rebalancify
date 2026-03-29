@@ -139,9 +139,9 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 
 ## 5. Current Build Phase
 
-**Active Epic:** EPIC-07 — Asset Discovery
-**Active Story:** STORY-026 — Discover page UI
-**Last Completed:** STORY-025 — Top Movers endpoint (Finnhub/FMP + CoinGecko) (2026-03-29)
+**Active Epic:** EPIC-08 — PWA & Polish
+**Active Story:** STORY-027 — PWA config + offline detection
+**Last Completed:** STORY-026 — Discover page UI (2026-03-29)
 
 Update this section manually as stories are completed. Format:
 ```
