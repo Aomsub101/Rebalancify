@@ -22,6 +22,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function RebalancePage({ params }: Props) {
   const { silo_id } = await params
+
+  // Playwright E2E bypass: skip Supabase auth and return mock silo data.
+  // Only active when PLAYWRIGHT_TEST_BYPASS=1 is set on the server process.
+  // Never set in production; never exposed to the browser.
+  if (process.env.PLAYWRIGHT_TEST_BYPASS === '1') {
+    const mockSilo = {
+      id: silo_id,
+      name: 'Test Silo (Alpaca)',
+      platform_type: 'alpaca',
+      base_currency: 'USD' as const,
+      alpaca_mode: 'paper',
+    }
+    return <RebalanceWizardView silo={mockSilo} initialWeightsSum={100} />
+  }
+
   const supabase = await createClient()
 
   const {
