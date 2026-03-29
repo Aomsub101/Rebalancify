@@ -3,11 +3,25 @@ import { GET } from '../route'
 import { NextRequest } from 'next/server'
 
 const mockGetUser = vi.fn()
+const mockIn = vi.fn()
+const mockSelect = vi.fn()
+const mockFrom = vi.fn()
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: mockGetUser },
+    from: mockFrom,
   })),
 }))
+
+// Default Supabase from() chain: no assets in DB → id: null for all tickers
+function mockFromEmpty() {
+  mockFrom.mockReturnValue({
+    select: mockSelect.mockReturnValue({
+      in: mockIn.mockResolvedValue({ data: [], error: null }),
+    }),
+  })
+}
 
 const AUTHED = { data: { user: { id: 'user-1' } }, error: null }
 const UNAUTHED = { data: { user: null }, error: null }
@@ -16,6 +30,7 @@ describe('GET /api/assets/search', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     mockGetUser.mockResolvedValue(AUTHED)
+    mockFromEmpty()
   })
 
   it('returns 401 when unauthenticated', async () => {
@@ -123,5 +138,71 @@ describe('GET /api/assets/search', () => {
     const req = new NextRequest('http://localhost/api/assets/search?q=bitcoin&type=crypto')
     const res = await GET(req)
     expect(res.status).toBe(503)
+  })
+
+  // ---------------------------------------------------------------------------
+  // id field tests (STORY-026 — needed for AssetPeerSearch → peers endpoint)
+  // ---------------------------------------------------------------------------
+
+  it('returns id: null when ticker is not registered in the assets table', async () => {
+    // AAPL not in DB
+    mockFrom.mockReturnValue({
+      select: mockSelect.mockReturnValue({
+        in: mockIn.mockResolvedValue({ data: [], error: null }),
+      }),
+    })
+
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          count: 1,
+          result: [{ description: 'Apple Inc', displaySymbol: 'AAPL', symbol: 'AAPL', type: 'Common Stock' }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ c: 185.2 }),
+      } as Response)
+
+    const req = new NextRequest('http://localhost/api/assets/search?q=apple&type=stock')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body[0].id).toBeNull()
+  })
+
+  it('returns id UUID when ticker is registered in the assets table', async () => {
+    const AAPL_UUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+
+    mockFrom.mockReturnValue({
+      select: mockSelect.mockReturnValue({
+        in: mockIn.mockResolvedValue({
+          data: [{ id: AAPL_UUID, ticker: 'AAPL' }],
+          error: null,
+        }),
+      }),
+    })
+
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          count: 1,
+          result: [{ description: 'Apple Inc', displaySymbol: 'AAPL', symbol: 'AAPL', type: 'Common Stock' }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ c: 185.2 }),
+      } as Response)
+
+    const req = new NextRequest('http://localhost/api/assets/search?q=apple&type=stock')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body[0].id).toBe(AAPL_UUID)
   })
 })

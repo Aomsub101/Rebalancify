@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 const VALID_TYPES = ['stock', 'crypto'] as const
 type AssetType = typeof VALID_TYPES[number]
@@ -17,6 +18,31 @@ interface CoinGeckoSearchCoin {
   symbol: string
   market_cap_rank: number | null
 }
+
+// ---------------------------------------------------------------------------
+// Helper: batch-lookup asset IDs by ticker from the assets table.
+// Returns a Map<ticker, uuid>. Tickers not in DB map to undefined.
+// ---------------------------------------------------------------------------
+
+async function lookupAssetIds(
+  supabase: SupabaseClient,
+  tickers: string[],
+): Promise<Map<string, string>> {
+  if (tickers.length === 0) return new Map()
+  const { data } = await supabase
+    .from('assets')
+    .select('id, ticker')
+    .in('ticker', tickers)
+  const map = new Map<string, string>()
+  for (const row of (data ?? []) as { id: string; ticker: string }[]) {
+    map.set(row.ticker, row.id)
+  }
+  return map
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -48,13 +74,17 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === 'stock') {
-    return searchStocks(q)
+    return searchStocks(q, supabase)
   } else {
-    return searchCrypto(q)
+    return searchCrypto(q, supabase)
   }
 }
 
-async function searchStocks(q: string) {
+// ---------------------------------------------------------------------------
+// Stock search (Finnhub)
+// ---------------------------------------------------------------------------
+
+async function searchStocks(q: string, supabase: SupabaseClient) {
   const apiKey = process.env.FINNHUB_API_KEY ?? ''
 
   let searchData: { count: number; result: FinnhubSearchResult[] }
@@ -78,7 +108,7 @@ async function searchStocks(q: string) {
 
   const top5 = (searchData.result ?? []).slice(0, 5)
 
-  const results = await Promise.all(
+  const rawResults = await Promise.all(
     top5.map(async (item) => {
       let price = '0.00000000'
       try {
@@ -103,10 +133,17 @@ async function searchStocks(q: string) {
     }),
   )
 
+  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
+  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
+
   return NextResponse.json(results)
 }
 
-async function searchCrypto(q: string) {
+// ---------------------------------------------------------------------------
+// Crypto search (CoinGecko)
+// ---------------------------------------------------------------------------
+
+async function searchCrypto(q: string, supabase: SupabaseClient) {
   const apiKey = process.env.COINGECKO_API_KEY ?? ''
 
   let coins: CoinGeckoSearchCoin[]
@@ -147,7 +184,7 @@ async function searchCrypto(q: string) {
     // leave priceMap empty
   }
 
-  const results = top5.map((coin) => ({
+  const rawResults = top5.map((coin) => ({
     ticker: coin.symbol.toUpperCase(),
     name: coin.name,
     asset_type: 'crypto',
@@ -157,6 +194,9 @@ async function searchCrypto(q: string) {
       ? priceMap[coin.id].usd.toFixed(8)
       : '0.00000000',
   }))
+
+  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
+  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
 
   return NextResponse.json(results)
 }
