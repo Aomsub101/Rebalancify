@@ -255,8 +255,9 @@ export async function GET(request: NextRequest) {
     try {
       const html = buildDriftDigestHtml(breachedItems)
       const { error: sendError } = await resend.emails.send({
-        from: 'Rebalancify <noreply@rebalancify.app>',
-        to: user.email,
+        from: 'Rebalancify <onboarding@resend.dev>',
+        // Note: using a fixed email for testing to avoid sending real emails during development
+        to: 'testingreceiving012@gmail.com',
         subject: `Drift Alert: ${breachedItems.length} asset${breachedItems.length > 1 ? 's' : ''} need attention`,
         html,
       })
