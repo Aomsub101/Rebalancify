@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-023 — News Page UI
+**Completed:** 2026-03-29
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `app/(dashboard)/news/layout.tsx` — server layout for `News | Rebalancify` metadata
+- `app/(dashboard)/news/page.tsx` — client page: accessible tablist (Portfolio News / Macro News), RefreshBar (last updated + Refresh button), ArticleList with pagination, EmptyState, ErrorBanner, LoadingSkeleton
+- `components/news/ArticleCard.tsx` — headline, ticker chips, source + relative timestamp, external link, hover-revealed read/dismiss controls with optimistic cache update
+- `components/news/RateLimitBanner.tsx` — amber collapsible banner shown when refresh rate limit is hit
+
+**Decisions made:**
+- Manual ARIA tablist pattern (no shadcn Tabs — not installed); accessible with `role="tab"`, `aria-selected`, `aria-controls`
+- Optimistic update via `setQueryData` in `onMutate`: marks `is_read/is_dismissed` on the article in cache; render-time filter (`!a.is_read && !a.is_dismissed`) hides it instantly; rollback on error
+- `authHeaders: Record<string, string>` typed explicitly to satisfy `fetch` `HeadersInit` — news routes use header auth (not cookie auth like silos)
+- `formatRelativeTime` kept inline (used only in news components; no lib/ file needed)
+- Both tab queries always enabled to prevent loading flash on tab switch
+
+**Discovered issues / carry-over notes:**
+- `fetched_at` column is available on articles from the GET endpoints (via `news_cache.*`), used for last-updated display in RefreshBar
+- `shadcn/ui tabs` not yet installed — if needed in future stories, run `npx shadcn add tabs`
+
+**Quality gates passed:** type-check ✅ | test ✅ (379/379) | build ✅ | setInterval ✅ (0 matches)
+
+---
+
 ### STORY-022 — Portfolio News & Macro News Endpoints
 **Completed:** 2026-03-29
 **Effort:** 0.5 day (estimated 1d)
