@@ -936,6 +936,12 @@ async function syncSchwab(
       )
 
     if (!holdingErr) holdingsUpdated++
+
+    try {
+      await fetchPrice(supabase, assetId, pos.symbol, 'finnhub')
+    } catch {
+      // non-fatal — stale cache remains
+    }
   }
 
   // 6. AC3: update silo.last_synced_at

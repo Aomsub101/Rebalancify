@@ -188,9 +188,19 @@ async function searchCrypto(q: string, supabase: SupabaseClient) {
     ticker: coin.symbol.toUpperCase(),
     name: coin.name,
     asset_type: 'crypto',
-    price_source: 'coingecko',
+    price_source: platformType === 'bitkub' ? 'bitkub' : 'coingecko',
     coingecko_id: coin.id,
     current_price: priceMap[coin.id]?.usd != null
+      ? priceMap[coin.id].usd.toFixed(8)
+      : '0.00000000',
+  }))
+
+  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
+  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
+
+  return NextResponse.json(results)
+}
+usd != null
       ? priceMap[coin.id].usd.toFixed(8)
       : '0.00000000',
   }))

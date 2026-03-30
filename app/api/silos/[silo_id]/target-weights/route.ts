@@ -93,8 +93,10 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   const weights = body.weights ?? []
 
   // Validate each weight: 0 ≤ weight_pct ≤ 100 (AC2, CLAUDE.md Rule 3)
+  let sumPct = new Decimal(0)
   for (const w of weights) {
     const val = new Decimal(w.weight_pct)
+    sumPct = sumPct.plus(val)
     if (val.lt(0) || val.gt(100)) {
       return NextResponse.json(
         {
@@ -106,6 +108,13 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
         { status: 422 }
       )
     }
+  }
+
+  if (sumPct.gt(100)) {
+    return NextResponse.json(
+      { error: { code: 'INVALID_WEIGHT_SUM', message: `Total weights sum to ${sumPct.toFixed(3)}% which exceeds 100%` } },
+      { status: 422 }
+    )
   }
 
   // Atomic replacement: delete all existing weights then insert new ones

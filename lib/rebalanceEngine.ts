@@ -219,7 +219,10 @@ export function calculateRebalance(input: EngineInput): EngineResult {
   // -------------------------------------------------------------------------
 
   // Collect all asset_ids that appear in weights
-  const allAssetIds = new Set<string>(weights.map(w => w.asset_id))
+  const allAssetIds = new Set<string>([
+    ...weights.map(w => w.asset_id),
+    ...holdings.map(h => h.asset_id)
+  ])
 
   interface RawOrder {
     asset_id: string

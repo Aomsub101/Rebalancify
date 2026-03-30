@@ -190,8 +190,7 @@ export async function GET(request: NextRequest) {
           asset_id,
           quantity,
           assets!inner(ticker),
-          price_cache!inner(price),
-          target_weights(weight_pct)
+          price_cache(price)
         `)
         .eq('silo_id', silo.id)
 
@@ -280,6 +279,16 @@ export async function GET(request: NextRequest) {
       )
       emailsFailed.push(user.userId)
     }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    emailsSent: emailsSent.length,
+    emailsFailed: emailsFailed.length,
+    schwabNotificationsInserted: schwabNotifInserted.length,
+  })
+}
+   }
   }
 
   return NextResponse.json({

@@ -78,19 +78,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   )
 
   // -------------------------------------------------------------------------
-  // AC-5: 15-minute rate-limit guard
-  // Check if a fresh fetch already happened within the last 15 minutes.
-  // If so, return cached articles without calling external APIs.
+  // AC-5: 15-minute rate-limit guard (per-user in-memory)
   // -------------------------------------------------------------------------
-  const { data: recentRow } = await serviceClient
-    .from('news_cache')
-    .select('fetched_at')
-    .gt('fetched_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
-    .order('fetched_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const globalAny = globalThis as any
+  if (!globalAny.newsRateLimitMap) {
+    globalAny.newsRateLimitMap = new Map<string, number>()
+  }
+  const lastFetch = globalAny.newsRateLimitMap.get(user.id) || 0
+  const nowMs = Date.now()
 
-  if (recentRow) {
+  if (nowMs - lastFetch < 15 * 60 * 1000) {
     // Guard hit — return cached rows without any external API calls
     const { data: cached } = await serviceClient
       .from('news_cache')
@@ -104,6 +101,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       guardHit: true,
     })
   }
+
+  globalAny.newsRateLimitMap.set(user.id, nowMs)
 
   // -------------------------------------------------------------------------
   // Fetch from external sources

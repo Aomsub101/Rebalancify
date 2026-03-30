@@ -152,13 +152,12 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   // -------------------------------------------------------------------------
 
   const engineHoldings: EngineHolding[] = holdingsRows
-    .filter(h => priceMap.has(h.asset_id))
     .map(h => ({
       asset_id: h.asset_id,
       ticker: h.assets.ticker,
       quantity: String(h.quantity),
       cash_balance: String(h.cash_balance),
-      price: priceMap.get(h.asset_id)!,
+      price: priceMap.get(h.asset_id) ?? '0',
     }))
 
   const engineWeights: EngineWeight[] = weightRows.map(w => ({

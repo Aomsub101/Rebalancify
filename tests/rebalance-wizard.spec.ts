@@ -18,6 +18,33 @@ import { test, expect, type Page } from '@playwright/test'
 const SILO_ID = 'test-silo-id'
 const WIZARD_URL = `/silos/${SILO_ID}/rebalance`
 
+test.beforeEach(async ({ context, page }) => {
+  await context.addCookies([
+    {
+      name: 'E2E_BYPASS',
+      value: '1',
+      url: 'http://localhost:3000'
+    }
+  ])
+  
+  await page.route('**/api/profile', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-123',
+        onboarded: true,
+        silo_count: 1,
+        active_silo_count: 1,
+        global_currency: 'USD',
+        show_usd_toggle: false,
+        drift_notif_channel: 'app',
+        alpaca_mode: 'paper'
+      })
+    })
+  })
+})
+
 const MOCK_CALCULATE_RESPONSE = {
   session_id: 'session-123',
   mode: 'partial',

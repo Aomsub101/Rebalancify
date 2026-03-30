@@ -130,11 +130,13 @@ export async function PATCH(request: Request) {
         { status: 500 },
       )
     }
-    if ('innovestx_digital_key' in body && typeof body.innovestx_digital_key === 'string' && body.innovestx_digital_key.length > 0) {
-      allowed.innovestx_digital_key_enc = encrypt(body.innovestx_digital_key, encKey)
+    if ('innovestx_digital_key' in body && typeof body.innovestx_digital_key === 'string') {
+      if (body.innovestx_digital_key.length > 0) allowed.innovestx_digital_key_enc = encrypt(body.innovestx_digital_key, encKey)
+      else if (body.innovestx_digital_key === '') allowed.innovestx_digital_key_enc = null
     }
-    if ('innovestx_digital_secret' in body && typeof body.innovestx_digital_secret === 'string' && body.innovestx_digital_secret.length > 0) {
-      allowed.innovestx_digital_secret_enc = encrypt(body.innovestx_digital_secret, encKey)
+    if ('innovestx_digital_secret' in body && typeof body.innovestx_digital_secret === 'string') {
+      if (body.innovestx_digital_secret.length > 0) allowed.innovestx_digital_secret_enc = encrypt(body.innovestx_digital_secret, encKey)
+      else if (body.innovestx_digital_secret === '') allowed.innovestx_digital_secret_enc = null
     }
   }
 
