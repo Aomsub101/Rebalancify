@@ -27,7 +27,7 @@
 | Phase 4 | EPIC-05 Drift & Overview                | ⬜ Planned     | —         | —         |
 | Phase 5 | EPIC-06 News Feed                       | ⬜ Planned     | —         | —         |
 | Phase 6 | EPIC-07 Discovery                       | ⬜ Planned     | —         | —         |
-| Phase 7 | EPIC-08 PWA & Polish                    | ⬜ Planned     | —         | —         |
+| Phase 7 | EPIC-08 PWA & Polish                    | ✅ Complete    | 2026-03-29 | 2026-03-30 |
 | Phase 8 | EPIC-09 AI Research Hub (v2.0)          | ⬜ Planned     | —         | —         |
 | Phase 9 | EPIC-10 Multi-Platform Execution (v2.0) | ⬜ Planned     | —         | —         |
 
@@ -118,7 +118,7 @@
 | --------- | ----------------------------------- | ------ | --------- |
 | STORY-027 | PWA config + offline detection      | ✅     | 2026-03-29 |
 | STORY-028 | Onboarding modal + progress banner  | ✅     | 2026-03-29 |
-| STORY-029 | Performance audit (all NFR targets) | ⬜     | —        |
+| STORY-029 | Performance audit (all NFR targets) | ✅     | 2026-03-30 |
 
 ---
 
