@@ -28,7 +28,7 @@
 | Phase 5 | EPIC-06 News Feed                       | ⬜ Planned     | —         | —         |
 | Phase 6 | EPIC-07 Discovery                       | ⬜ Planned     | —         | —         |
 | Phase 7 | EPIC-08 PWA & Polish                    | ✅ Complete    | 2026-03-29 | 2026-03-30 |
-| Phase 8 | EPIC-09 AI Research Hub (v2.0)          | ⬜ Planned     | —         | —         |
+| Phase 8 | EPIC-09 AI Research Hub (v2.0)          | 🟡 In Progress | 2026-03-30 | —         |
 | Phase 9 | EPIC-10 Multi-Platform Execution (v2.0) | ⬜ Planned     | —         | —         |
 
 ---
@@ -126,7 +126,7 @@
 
 | Story      | Title                                                       | Status | Completed |
 | ---------- | ----------------------------------------------------------- | ------ | --------- |
-| STORY-030  | LLM key storage + settings UI                               | ⬜     | —        |
+| STORY-030  | LLM key storage + settings UI                               | ✅     | 2026-03-30 |
 | STORY-031  | RAG document ingest pipeline — default knowledge base      | ⬜     | —        |
 | STORY-031b | RAG user document upload + corpus management                | ⬜     | —        |
 | STORY-032  | Research endpoint — RAG + LLM routing (6 providers)        | ⬜     | —        |

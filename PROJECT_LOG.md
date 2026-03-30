@@ -39,6 +39,29 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-030 — LLM Key Storage & Settings UI
+**Completed:** 2026-03-30
+**Effort:** 0.5 day (estimated 1d)
+
+**What was built:**
+- `lib/llmProviders.ts` — 6 providers (Google/Groq/DeepSeek free; OpenAI/Anthropic/OpenRouter paid), default models, `getDefaultModel()`, `getModelsForProvider()`
+- `lib/llmProviders.test.ts` — 18 unit tests (TDD Red→Green)
+- `app/api/profile/route.ts` — PATCH now encrypts `llm_key` → `llm_key_enc` (same AES-256-GCM pattern); also accepts `llm_provider` and `llm_model`
+- `app/api/llm/validate/route.ts` — POST endpoint: pings provider's model-list API (or 1-token Anthropic message) to validate key before save
+- `app/(dashboard)/settings/page.tsx` — LLMSection added before Silo usage bar: ProviderSelector (6 providers with Free labels), ModelSelector (filtered per provider, pre-filled default), LLMKeyInput (password+show-hide), FreeTierNote, inline validation error
+
+**Decisions made:**
+- AC1 says "Returns `{ llm_connected: true }`" — kept full profile response shape for consistency with other broker PATCHes; response always includes `llm_connected` boolean
+- Key validation runs before storage (not after): user gets immediate feedback without a silent bad key being saved; Anthropic requires a 1-token message (no models list endpoint)
+- OpenRouter `ModelSelector` renders a text input (not select) since model IDs are arbitrary strings — consistent with their open-routing model
+
+**Discovered issues / carry-over notes:**
+- `lib/profile.ts` and profile tests already had full LLM coverage from STORY-001 planning; no changes needed there
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅
+
+---
+
 ### STORY-029 — Performance Audit & Polish
 **Completed:** 2026-03-30
 **Effort:** 0.5 day (estimated 2d)
