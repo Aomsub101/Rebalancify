@@ -147,6 +147,10 @@ export function HoldingRow({
       <td className="px-4 py-3 text-sm">
         <StalenessTag staleDays={holding.stale_days} />
       </td>
+      {/* Age */}
+      <td className="px-4 py-3 text-right font-mono text-sm tabular-nums text-muted-foreground">
+        {formatNumber(holding.age_days, 'age')}
+      </td>
     </tr>
   )
 }

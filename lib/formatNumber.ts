@@ -3,7 +3,7 @@ type QuantityContext = 'stock' | 'crypto'
 
 export function formatNumber(
   value: string | number,
-  type: 'price' | 'weight' | 'weight-input' | 'drift' | 'quantity' | 'staleness',
+  type: 'price' | 'weight' | 'weight-input' | 'drift' | 'quantity' | 'staleness' | 'age',
   context?: PriceContext | QuantityContext
 ): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
@@ -44,6 +44,12 @@ export function formatNumber(
     case 'staleness': {
       if (num === 0) return 'today'
       return num === 1 ? '1 day ago' : `${num} days ago`
+    }
+    case 'age': {
+      if (num === 0) return '< 1 Day'
+      if (num < 30) return `${num} Days`
+      if (num < 365) return `${Math.floor(num / 30)} Months`
+      return `${Math.floor(num / 365)} Years`
     }
     default:
       return String(num)

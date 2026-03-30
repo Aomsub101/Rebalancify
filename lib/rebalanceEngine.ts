@@ -250,6 +250,15 @@ export function calculateRebalance(input: EngineInput): EngineResult {
       continue
     }
 
+    // Skip orphaned holdings: assets in holdings but with no assigned target weight.
+    // These were never entered into the target_weights table, so the user has not
+    // expressed an intent to hold or sell them — they should be left alone silently.
+    // This does NOT affect assets with explicit weight_pct = 0 (those are in weightMap
+    // with a value of 0, so !targetWeightPct is false for them).
+    if (!targetWeightPct) {
+      continue
+    }
+
     const delta = targetValue.minus(currentValue)
 
     if (delta.lt('-0.00000001')) {
