@@ -115,7 +115,20 @@ describe('POST /api/research/[ticker]', () => {
     })
     
     ;(callLLM as any).mockResolvedValue({
-      choices: [{ message: { content: JSON.stringify({ sentiment: 'bearish', confidence: 0.5, risk_factors: ['risk1'], summary: 'sum', sources: [] }) } }]
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              sentiment: 'bearish',
+              confidence: 0.5,
+              risk_factors: ['risk1'],
+              summary: 'sum',
+              relationship_insight: 'Short peer context',
+              sources: [],
+            }),
+          },
+        },
+      ],
     })
 
     // For insert result (last call is single)
@@ -130,6 +143,54 @@ describe('POST /api/research/[ticker]', () => {
     expect(body.output.sentiment).toBe('bearish')
     expect(body.output.sources).toContain('doc1')
     expect(callLLM).toHaveBeenCalledWith('openai', 'gpt-4', 'plain_key', expect.any(Array))
+  })
+
+  it('adds relationship_insight when missing (fallback derived from summary)', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'user_123' } } })
+    mockSupabase.single.mockResolvedValueOnce({ data: null }) // Cache miss
+    mockSupabase.single.mockResolvedValueOnce({
+      data: { llm_provider: 'openai', llm_model: 'gpt-4', llm_key_enc: 'enc_key' },
+    }) // Profile
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 'asset_123' } }) // Asset resolve
+
+    ;(decrypt as any).mockReturnValue('plain_key')
+    ;(embedText as any).mockResolvedValue([0.1, 0.2])
+    mockSupabase.rpc.mockResolvedValueOnce({ data: [] })
+
+    mockSupabase.contains.mockReturnThis()
+    mockSupabase.order.mockReturnThis()
+    mockSupabase.limit.mockImplementation((n: number) => {
+      if (n === 5) return Promise.resolve({ data: [] })
+      return mockSupabase
+    })
+
+    const summary =
+      'This summary should generate a short tag for peers without requiring a dedicated field.'
+
+    ;(callLLM as any).mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              sentiment: 'neutral',
+              confidence: 0.5,
+              risk_factors: ['risk1', 'risk2'],
+              summary,
+              sources: [],
+            }),
+          },
+        },
+      ],
+    })
+
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 'new_session_123', created_at: 'date2' } })
+
+    const req = new NextRequest('http://localhost/api/research/AAPL', { method: 'POST' })
+    const res = await POST(req, { params: Promise.resolve({ ticker: 'AAPL' }) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(typeof body.output.relationship_insight).toBe('string')
+    expect(body.output.relationship_insight.length).toBeGreaterThan(0)
   })
 
   it('returns 422 if LLM output contains allocation percentage recommendation', async () => {
@@ -161,6 +222,7 @@ describe('POST /api/research/[ticker]', () => {
               confidence: 0.5,
               risk_factors: ['risk1', 'risk2'],
               summary: 'Allocate 25% to AAPL given the current outlook.',
+              relationship_insight: 'Allocation advice is disallowed',
               sources: [],
             }),
           },
@@ -208,6 +270,7 @@ describe('POST /api/research/[ticker]', () => {
               confidence: 0.5,
               risk_factors: ['risk1', 'risk2'],
               summary: 'New research result.',
+              relationship_insight: 'Updated view after refresh',
               sources: [],
             }),
           },

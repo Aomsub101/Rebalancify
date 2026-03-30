@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Link from 'next/link'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Decimal from 'decimal.js'
@@ -83,7 +84,13 @@ export function HoldingRow({
     <tr className="border-t border-border hover:bg-muted/30 transition-colors">
       <td className="px-4 py-3 text-sm">
         <div className="flex flex-col">
-          <span className="font-mono font-semibold text-foreground">{holding.ticker}</span>
+          <Link
+            href={`/research/${encodeURIComponent(holding.ticker)}`}
+            className="font-mono font-semibold text-foreground hover:text-primary underline decoration-dotted outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm w-fit"
+            aria-label={`Open research for ${holding.ticker}`}
+          >
+            {holding.ticker}
+          </Link>
           <span className="text-xs text-muted-foreground">{holding.name}</span>
         </div>
       </td>

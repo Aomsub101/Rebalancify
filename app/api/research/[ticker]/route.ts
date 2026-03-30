@@ -4,6 +4,15 @@ import { decrypt } from '@/lib/encryption'
 import { embedText } from '@/lib/ragIngest'
 import { callLLM } from '@/lib/llmRouter'
 
+function toWordLimitedTag(text: string, maxWords: number): string {
+  const words = String(text ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean)
+  return words.slice(0, maxWords).join(' ')
+}
+
 function containsAllocationPercentageRecommendation(text: string): boolean {
   const lower = text.toLowerCase()
   const pctRegex = /\d+\.?\d*\s*%/g
@@ -174,6 +183,7 @@ You MUST return your response in the following JSON format:
   "confidence": 0.0 to 1.0,
   "risk_factors": ["factor 1", "factor 2"],
   "summary": "150-300 word summary",
+  "relationship_insight": "string (<=12 words)",
   "sources": ["source 1", "source 2"]
 }`
 
@@ -227,6 +237,11 @@ Provide a structured sentiment analysis for ${ticker}.`
       if (!llmOutput.sources || llmOutput.sources.length === 0) {
         llmOutput.sources = sources
       }
+
+      // Ensure relationship_insight is present and <= 12 words (used by peers UI)
+      const fallback = toWordLimitedTag(llmOutput.summary ?? '', 12)
+      const rawInsight = llmOutput.relationship_insight ?? fallback
+      llmOutput.relationship_insight = toWordLimitedTag(rawInsight, 12)
     } catch (parseErr) {
       console.error('Failed to parse LLM response as JSON:', content)
       // Fallback or error

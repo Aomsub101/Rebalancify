@@ -100,12 +100,35 @@ describe('GET /api/assets/:asset_id/peers', () => {
   it('returns 404 when asset does not exist', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
     mockFromImpl = () => ({
+      // llm_connected lookup
       select: () => ({
         eq: () => ({
-          single: () => ({ data: null, error: new Error('Not found') }),
+          single: () => ({ data: { llm_key_enc: null }, error: null }),
         }),
       }),
     })
+    // Override assets lookup specifically
+    mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
+      if (table === 'assets') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: null, error: new Error('Not found') }),
+            }),
+          }),
+        }
+      }
+      return {}
+    }
 
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(404)
@@ -120,6 +143,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 
     mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
       if (table === 'assets') {
         return {
           select: () => ({
@@ -175,6 +207,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
 
     // 'GOOGL' is in the Technology sector in sector_taxonomy.json
     mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
       if (table === 'assets') {
         return {
           select: () => ({
@@ -218,6 +259,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 
     mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
       if (table === 'assets') {
         return {
           select: () => ({
@@ -259,6 +309,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 
     mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
       if (table === 'assets') {
         return {
           select: () => ({
@@ -301,6 +360,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
     const manyTickers = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10']
 
     mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: null }, error: null }),
+            }),
+          }),
+        }
+      }
       if (table === 'assets') {
         return {
           select: () => ({
@@ -332,5 +400,76 @@ describe('GET /api/assets/:asset_id/peers', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.length).toBeLessThanOrEqual(8)
+  })
+
+  it('includes ai_insight_tag when llm is connected and cached session exists', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+
+    mockFromImpl = (table) => {
+      if (table === 'user_profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({ data: { llm_key_enc: 'enc' }, error: null }),
+            }),
+          }),
+        }
+      }
+      if (table === 'assets') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({
+                data: { id: ASSET_ID, ticker: 'AAPL', name: 'Apple Inc.', sector: 'Technology' },
+                error: null,
+              }),
+            }),
+            in: () => ({
+              data: [{ id: 'peer-1', ticker: 'MSFT', name: 'Microsoft' }],
+              error: null,
+            }),
+          }),
+        }
+      }
+      if (table === 'price_cache') {
+        return chainSelectIn({ data: [{ asset_id: 'peer-1', price: '415.00000000' }], error: null })
+      }
+      if (table === 'research_sessions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                order: () => ({
+                  data: [
+                    {
+                      ticker: 'MSFT',
+                      created_at: '2026-03-30T00:00:00Z',
+                      output: { relationship_insight: 'Competitor in enterprise software' },
+                    },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }
+      }
+      return {}
+    }
+
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ['MSFT'],
+    } as Response)
+
+    const res = await GET(makeRequest(), makeParams())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body[0]).toEqual({
+      ticker: 'MSFT',
+      name: 'Microsoft',
+      current_price: '415.00000000',
+      ai_insight_tag: 'Competitor in enterprise software',
+    })
   })
 })

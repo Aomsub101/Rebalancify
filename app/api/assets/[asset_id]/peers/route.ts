@@ -42,6 +42,12 @@ interface PriceCacheRow {
   price: string
 }
 
+interface ResearchSessionRow {
+  ticker: string
+  output: unknown
+  created_at: string
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -65,6 +71,15 @@ export async function GET(
   }
 
   const { asset_id } = await params
+
+  // Determine if user has LLM connected (do NOT expose key)
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('llm_key_enc')
+    .eq('id', user.id)
+    .single()
+
+  const llmConnected = profile?.llm_key_enc != null
 
   // -------------------------------------------------------------------------
   // Step 1: Resolve the queried asset
@@ -175,5 +190,42 @@ export async function GET(
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
-  return NextResponse.json(result)
+  // -------------------------------------------------------------------------
+  // Step 7 (v2.0): Optional AI insight tag from cached research_sessions
+  // - No LLM calls; use user's cached sessions only.
+  // - Only include field when llm_connected is true.
+  // -------------------------------------------------------------------------
+  if (!llmConnected || result.length === 0) {
+    return NextResponse.json(result)
+  }
+
+  const tickers = result.map((r) => r.ticker)
+  const { data: sessionsRaw } = await supabase
+    .from('research_sessions')
+    .select('ticker, output, created_at')
+    .eq('user_id', user.id)
+    .in('ticker', tickers)
+    .order('created_at', { ascending: false })
+
+  const sessions = (sessionsRaw ?? []) as ResearchSessionRow[]
+
+  const tagByTicker = new Map<string, string>()
+  for (const s of sessions) {
+    if (tagByTicker.has(s.ticker)) continue
+    const output = s.output as any
+    const raw =
+      output?.relationship_insight ??
+      (typeof output?.summary === 'string'
+        ? String(output.summary).trim().split(/\s+/).slice(0, 12).join(' ')
+        : '')
+    const tag = String(raw ?? '').trim()
+    if (tag) tagByTicker.set(s.ticker, tag)
+  }
+
+  const enriched = result.map((r) => {
+    const tag = tagByTicker.get(r.ticker)
+    return tag ? { ...r, ai_insight_tag: tag } : r
+  })
+
+  return NextResponse.json(enriched)
 }

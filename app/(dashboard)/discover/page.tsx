@@ -59,6 +59,10 @@ interface SiloSummary {
   name: string
 }
 
+interface ProfileResponse {
+  llm_connected: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -92,6 +96,19 @@ export default function DiscoverPage() {
   const authHeaders: Record<string, string> = session
     ? { Authorization: `Bearer ${session.access_token}` }
     : {}
+
+  const { data: profile } = useQuery<ProfileResponse>({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      const res = await fetch('/api/profile', { headers: authHeaders })
+      if (!res.ok) throw new Error('Failed to fetch profile')
+      return res.json()
+    },
+    enabled: !!session,
+    staleTime: 60 * 1000,
+  })
+
+  const llmConnected = profile?.llm_connected ?? false
 
   // ---------------------------------------------------------------------------
   // Section 1: TopMoversTabs state
@@ -428,7 +445,7 @@ export default function DiscoverPage() {
               aria-label={`Peer assets for ${selectedAsset.ticker}`}
             >
               {peersData!.map((peer) => (
-                <PeerCard key={peer.ticker} peer={peer} />
+                <PeerCard key={peer.ticker} peer={peer} llmConnected={llmConnected} />
               ))}
             </div>
           )}
