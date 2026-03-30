@@ -4,12 +4,56 @@ import { decrypt } from '@/lib/encryption'
 import { embedText } from '@/lib/ragIngest'
 import { callLLM } from '@/lib/llmRouter'
 
+function containsAllocationPercentageRecommendation(text: string): boolean {
+  const lower = text.toLowerCase()
+  const pctRegex = /\d+\.?\d*\s*%/g
+  const allocRegex =
+    /\b(allocation|allocate|weight|portfolio|target|position|holdings|exposure|rebalanc)\b/g
+  const windowSize = 80
+
+  const pctMatches = Array.from(lower.matchAll(pctRegex))
+  if (pctMatches.length === 0) return false
+
+  for (const m of pctMatches) {
+    const idx = m.index ?? -1
+    if (idx < 0) continue
+    const start = Math.max(0, idx - windowSize)
+    const end = Math.min(lower.length, idx + m[0].length + windowSize)
+    const windowText = lower.slice(start, end)
+    if (allocRegex.test(windowText)) return true
+    allocRegex.lastIndex = 0
+  }
+
+  // Also catch keyword-first phrasing like "target weight ... 25%"
+  const allocMatches = Array.from(lower.matchAll(allocRegex))
+  for (const m of allocMatches) {
+    const idx = m.index ?? -1
+    if (idx < 0) continue
+    const start = Math.max(0, idx - windowSize)
+    const end = Math.min(lower.length, idx + m[0].length + windowSize)
+    const windowText = lower.slice(start, end)
+    if (pctRegex.test(windowText)) return true
+    pctRegex.lastIndex = 0
+  }
+
+  return false
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   const { ticker } = await params
   const supabase = await createClient()
+
+  // Optional body: { refresh?: boolean }
+  let refresh = false
+  try {
+    const body = (await req.json()) as { refresh?: unknown }
+    refresh = body?.refresh === true
+  } catch {
+    // Empty/invalid body is fine
+  }
 
   // 1. Authenticate user
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,27 +65,29 @@ export async function POST(
   }
 
   // 2. Check cache (Acceptance Criterion 1)
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data: cachedSession } = await supabase
-    .from('research_sessions')
-    .select('*')
-    .eq('user_id', user.id)
-    .eq('ticker', ticker)
-    .or(`refreshed_at.is.null,refreshed_at.gt.${twentyFourHoursAgo}`)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  if (!refresh) {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: cachedSession } = await supabase
+      .from('research_sessions')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('ticker', ticker)
+      .or(`refreshed_at.is.null,refreshed_at.gt.${twentyFourHoursAgo}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
 
-  if (cachedSession) {
-    return NextResponse.json({
-      session_id: cachedSession.id,
-      ticker: cachedSession.ticker,
-      llm_provider: cachedSession.llm_provider,
-      llm_model: cachedSession.llm_model,
-      cached: true,
-      output: cachedSession.output,
-      created_at: cachedSession.created_at,
-    })
+    if (cachedSession) {
+      return NextResponse.json({
+        session_id: cachedSession.id,
+        ticker: cachedSession.ticker,
+        llm_provider: cachedSession.llm_provider,
+        llm_model: cachedSession.llm_model,
+        cached: true,
+        output: cachedSession.output,
+        created_at: cachedSession.created_at,
+      })
+    }
   }
 
   // 3. Get LLM profile (Acceptance Criterion 7, 10, 11)
@@ -161,6 +207,19 @@ Provide a structured sentiment analysis for ${ticker}.`
       content = (llmResponse as any).choices[0].message.content
     }
 
+    // Allocation guard (STORY-032b AC1): reject allocation percentage recommendations
+    if (containsAllocationPercentageRecommendation(content)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'LLM_ALLOCATION_OUTPUT',
+            message: 'LLM output contained a specific allocation percentage recommendation',
+          },
+        },
+        { status: 422 }
+      )
+    }
+
     // Attempt to parse JSON
     try {
       llmOutput = JSON.parse(content)
@@ -194,6 +253,7 @@ Provide a structured sentiment analysis for ${ticker}.`
       llm_provider: profile.llm_provider,
       llm_model: profile.llm_model,
       output: llmOutput,
+      refreshed_at: refresh ? new Date().toISOString() : null,
       metadata: { source: 'manual_search' } // Default for now
     })
     .select('id, created_at')

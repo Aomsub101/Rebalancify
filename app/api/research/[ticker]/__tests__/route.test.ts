@@ -132,6 +132,114 @@ describe('POST /api/research/[ticker]', () => {
     expect(callLLM).toHaveBeenCalledWith('openai', 'gpt-4', 'plain_key', expect.any(Array))
   })
 
+  it('returns 422 if LLM output contains allocation percentage recommendation', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'user_123' } } })
+    mockSupabase.single.mockResolvedValueOnce({ data: null }) // Cache miss
+    mockSupabase.single.mockResolvedValueOnce({
+      data: { llm_provider: 'openai', llm_model: 'gpt-4', llm_key_enc: 'enc_key' },
+    }) // Profile
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 'asset_123' } }) // Asset resolve
+
+    ;(decrypt as any).mockReturnValue('plain_key')
+    ;(embedText as any).mockResolvedValue([0.1, 0.2])
+    mockSupabase.rpc.mockResolvedValueOnce({ data: [] })
+
+    // Mock news context chain
+    mockSupabase.contains.mockReturnThis()
+    mockSupabase.order.mockReturnThis()
+    mockSupabase.limit.mockImplementation((n: number) => {
+      if (n === 5) return Promise.resolve({ data: [] })
+      return mockSupabase
+    })
+
+    ;(callLLM as any).mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              sentiment: 'neutral',
+              confidence: 0.5,
+              risk_factors: ['risk1', 'risk2'],
+              summary: 'Allocate 25% to AAPL given the current outlook.',
+              sources: [],
+            }),
+          },
+        },
+      ],
+    })
+
+    const req = new NextRequest('http://localhost/api/research/AAPL', { method: 'POST' })
+    const res = await POST(req, { params: Promise.resolve({ ticker: 'AAPL' }) })
+
+    expect(res.status).toBe(422)
+    const body = await res.json()
+    expect(body.error.code).toBe('LLM_ALLOCATION_OUTPUT')
+  })
+
+  it('bypasses cache and inserts refreshed session when { refresh: true }', async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'user_123' } } })
+
+    // Profile
+    mockSupabase.single.mockResolvedValueOnce({
+      data: { llm_provider: 'openai', llm_model: 'gpt-4', llm_key_enc: 'enc_key' },
+    })
+
+    // Asset resolve
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 'asset_123' } })
+
+    ;(decrypt as any).mockReturnValue('plain_key')
+    ;(embedText as any).mockResolvedValue([0.1, 0.2])
+    mockSupabase.rpc.mockResolvedValueOnce({ data: [] })
+
+    // News fetch
+    mockSupabase.contains.mockReturnThis()
+    mockSupabase.order.mockReturnThis()
+    mockSupabase.limit.mockImplementation((n: number) => {
+      if (n === 5) return Promise.resolve({ data: [] })
+      return mockSupabase
+    })
+
+    ;(callLLM as any).mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              sentiment: 'bearish',
+              confidence: 0.5,
+              risk_factors: ['risk1', 'risk2'],
+              summary: 'New research result.',
+              sources: [],
+            }),
+          },
+        },
+      ],
+    })
+
+    // Insert result
+    mockSupabase.single.mockResolvedValueOnce({ data: { id: 'session_new', created_at: 'date_new' } })
+
+    const req = new NextRequest('http://localhost/api/research/AAPL', {
+      method: 'POST',
+      body: JSON.stringify({ refresh: true }),
+    })
+    const res = await POST(req, { params: Promise.resolve({ ticker: 'AAPL' }) })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.cached).toBe(false)
+    expect(body.session_id).toBe('session_new')
+    expect(callLLM).toHaveBeenCalled()
+    expect(mockSupabase.or).not.toHaveBeenCalled()
+
+    expect(mockSupabase.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: 'user_123',
+        ticker: 'AAPL',
+        refreshed_at: expect.any(String),
+      })
+    )
+  })
+
   it('returns 502 if LLM provider returns an error', async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'user_123' } } })
     mockSupabase.single.mockResolvedValueOnce({ data: null }) // Cache miss
