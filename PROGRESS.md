@@ -127,7 +127,7 @@
 | Story      | Title                                                       | Status | Completed |
 | ---------- | ----------------------------------------------------------- | ------ | --------- |
 | STORY-030  | LLM key storage + settings UI                               | ✅     | 2026-03-30 |
-| STORY-031  | RAG document ingest pipeline — default knowledge base      | ⬜     | —        |
+| STORY-031  | RAG document ingest pipeline — default knowledge base      | ✅     | 2026-03-30 |
 | STORY-031b | RAG user document upload + corpus management                | ⬜     | —        |
 | STORY-032  | Research endpoint — RAG + LLM routing (6 providers)        | ⬜     | —        |
 | STORY-032b | Research endpoint — allocation guard + provider unit tests | ⬜     | —        |

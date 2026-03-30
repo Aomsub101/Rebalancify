@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-031 — RAG Document Ingest Pipeline
+**Completed:** 2026-03-30
+**Effort:** 0.5 day (estimated 3d)
+
+**What was built:**
+- `knowledge/` directory with 10 default financial `.md` files: MPT, asset allocation, rebalancing strategies, systematic risk factors, DCF fundamentals, fixed income basics, crypto characteristics, emerging markets risk, behavioural finance biases, portfolio concentration risk
+- `lib/ragIngest.ts` — `chunkDocument()` (H2-boundary splitter), `padEmbedding()` (768→1536 zero-pad), `embedText()` (Google text-embedding-004 + OpenAI text-embedding-3-small routing via `EMBEDDING_PROVIDER` env var), `embedTexts()` batch helper
+- `lib/ragIngest.test.ts` — 13 TDD unit tests (Red→Green)
+- `app/api/knowledge/ingest/route.ts` — POST endpoint: auth guard, reads `/knowledge/*.md`, chunks, embeds server-side, idempotent upsert to `knowledge_chunks` (ON CONFLICT DO NOTHING)
+
+**Decisions made:**
+- Stable `document_id` derived from SHA-256 of filename — makes re-ingest idempotent without an extra lookup
+- `EMBEDDING_PROVIDER` defaults to `google` (free tier); padded to 1536 dims for `vector(1536)` column compatibility
+- `## Sources` section excluded from chunks — it's reference metadata, not retrieval content
+
+**Discovered issues / carry-over notes:**
+- STORY-031b (user upload + corpus size warning + HNSW EXPLAIN verification) is the next story; story file already exists
+
+**Quality gates passed:** type-check ✅ | test ✅ (485/485) | build ✅ | security ✅ | RLS ✅ (migration 14)
+
+---
+
 ### STORY-030 — LLM Key Storage & Settings UI
 **Completed:** 2026-03-30
 **Effort:** 0.5 day (estimated 1d)

@@ -140,8 +140,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-09 — AI Research Hub (v2.0)
-**Active Story:** STORY-031 — RAG document ingest pipeline — default knowledge base
-**Last Completed:** STORY-030 — LLM key storage + settings UI (2026-03-30)
+**Active Story:** STORY-031b — RAG user document upload + corpus management
+**Last Completed:** STORY-031 — RAG document ingest pipeline — default knowledge base (2026-03-30)
 
 Update this section manually as stories are completed. Format:
 ```
