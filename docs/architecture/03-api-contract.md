@@ -511,3 +511,51 @@ Triggers or retrieves cached research session.
 
 **Error 403:** `LLM_KEY_MISSING` — no LLM key configured.
 **Error 502:** `LLM_API_ERROR` — provider returned an error.
+
+---
+
+## Knowledge Base Endpoints
+
+### POST /api/knowledge/upload
+Uploads a document (PDF or Markdown) to the user's custom knowledge base. The document is parsed, chunked, embedded, and stored in `knowledge_chunks`.
+
+**Request:** `multipart/form-data`
+- `file`: The document file (PDF or MD)
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "document_id": "uuid",
+  "file_name": "filename.pdf",
+  "chunks_inserted": 12
+}
+```
+
+**Error 400:** `UNSUPPORTED_FILE_TYPE` — only PDF and MD files are supported.
+**Error 422:** `PDF_PARSE_ERROR` — failed to extract text from PDF.
+**Error 422:** `EMPTY_DOCUMENT` — no usable text found in document.
+
+### GET /api/knowledge/corpus-size
+Returns the total storage size of the `knowledge_chunks` table in bytes. Used for monitoring the 500MB free tier limit.
+
+**Response (200):**
+```json
+{
+  "size_bytes": 1048576
+}
+```
+
+### POST /api/knowledge/ingest
+Reads all default research files from the `/knowledge/` directory, chunks them, generates embeddings, and upserts them into `knowledge_chunks`.
+
+**Request:** `POST /api/knowledge/ingest` (no body)
+
+**Response (200):**
+```json
+{
+  "files_processed": 10,
+  "chunks_inserted": 145,
+  "skipped_files": []
+}
+```

@@ -32,6 +32,12 @@ async function fetchProfile(): Promise<ProfileData> {
   return res.json()
 }
 
+async function fetchCorpusSize(): Promise<{ size_bytes: number }> {
+  const res = await fetch('/api/knowledge/corpus-size')
+  if (!res.ok) throw new Error('Failed to fetch corpus size')
+  return res.json()
+}
+
 type NotifChannel = 'app' | 'email' | 'both'
 
 const NOTIF_OPTIONS: { value: NotifChannel; label: string; description: string }[] = [
@@ -107,6 +113,11 @@ export default function SettingsPage() {
   const [isSavingLlm, setIsSavingLlm] = useState(false)
   const [llmSaved, setLlmSaved] = useState(false)
   const [llmValidationError, setLlmValidationError] = useState<string | null>(null)
+
+  const { data: corpusSize } = useQuery({
+    queryKey: ['corpusSize'],
+    queryFn: fetchCorpusSize,
+  })
 
   useEffect(() => {
     if (profile) {
@@ -1208,6 +1219,45 @@ export default function SettingsPage() {
           >
             {isSavingLlm ? 'Saving…' : 'Save'}
           </button>
+        </div>
+      </section>
+
+      {/* Knowledge Base section */}
+      <section aria-labelledby="knowledge-base-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <h2 id="knowledge-base-heading" className="text-xl font-medium text-foreground mb-1">Knowledge Base</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Manage your uploaded documents and custom research corpus.
+        </p>
+
+        {corpusSize && corpusSize.size_bytes >= 400 * 1024 * 1024 && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-bg px-4 py-3 text-warning text-sm mb-4"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <p className="font-medium">Storage near capacity</p>
+              <p className="text-xs text-warning/80 mt-0.5">
+                Your knowledge base is near capacity (80%). Consider removing uploaded documents.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+          <span>
+            {corpusSize ? (corpusSize.size_bytes / (1024 * 1024)).toFixed(1) : 0} MB of 500 MB used
+          </span>
+        </div>
+        <div className="h-2 rounded-full bg-secondary overflow-hidden" role="progressbar" aria-valuenow={corpusSize?.size_bytes ?? 0} aria-valuemax={500 * 1024 * 1024}>
+          <div
+            className={cn(
+              'h-full rounded-full transition-all bg-primary',
+              corpusSize && corpusSize.size_bytes >= 500 * 1024 * 1024 && 'bg-negative w-full',
+              corpusSize && corpusSize.size_bytes >= 400 * 1024 * 1024 && corpusSize.size_bytes < 500 * 1024 * 1024 && 'bg-warning',
+            )}
+            style={{ width: `${Math.min(((corpusSize?.size_bytes ?? 0) / (500 * 1024 * 1024)) * 100, 100)}%` }}
+          />
         </div>
       </section>
 

@@ -70,8 +70,8 @@
 
 ## EPIC-04 — Broker Fetch (Phase 3)
 
-| Story      | Title                                                | Status | Completed |
-| ---------- | ---------------------------------------------------- | ------ | --------- |
+| Story      | Title                                                | Status | Completed  |
+| ---------- | ---------------------------------------------------- | ------ | ---------- |
 | STORY-013  | BITKUB sync (wallet + ticker prices)                 | ✅     | 2026-03-28 |
 | STORY-014  | InnovestX sync — Settrade equity branch             | ✅     | 2026-03-28 |
 | STORY-014b | InnovestX sync — digital asset branch + Settings UI | ✅     | 2026-03-28 |
@@ -83,8 +83,8 @@
 
 ## EPIC-05 — Drift & Overview (Phase 4)
 
-| Story     | Title                                             | Status | Completed |
-| --------- | ------------------------------------------------- | ------ | --------- |
+| Story     | Title                                             | Status | Completed  |
+| --------- | ------------------------------------------------- | ------ | ---------- |
 | STORY-017 | Drift calculation endpoint + DriftBadge component | ✅     | 2026-03-28 |
 | STORY-018 | FX rates endpoint + USD conversion toggle         | ✅     | 2026-03-28 |
 | STORY-019 | Overview page (SiloCardList + GlobalDriftBanner)  | ✅     | 2026-03-29 |
@@ -94,8 +94,8 @@
 
 ## EPIC-06 — News Feed (Phase 5)
 
-| Story     | Title                                         | Status | Completed |
-| --------- | --------------------------------------------- | ------ | --------- |
+| Story     | Title                                         | Status | Completed  |
+| --------- | --------------------------------------------- | ------ | ---------- |
 | STORY-021 | News fetch service + cache (Finnhub + FMP)    | ✅     | 2026-03-29 |
 | STORY-022 | Portfolio news endpoint (two-tier matching)   | ✅     | 2026-03-29 |
 | STORY-023 | News page UI (tabs, ArticleList, ArticleCard) | ✅     | 2026-03-29 |
@@ -104,8 +104,8 @@
 
 ## EPIC-07 — Asset Discovery (Phase 6)
 
-| Story     | Title                                            | Status | Completed |
-| --------- | ------------------------------------------------ | ------ | --------- |
+| Story     | Title                                            | Status | Completed  |
+| --------- | ------------------------------------------------ | ------ | ---------- |
 | STORY-024 | Peer assets endpoint (Finnhub + static fallback) | ✅     | 2026-03-29 |
 | STORY-025 | Top Movers endpoint (Finnhub/FMP + CoinGecko)    | ✅     | 2026-03-29 |
 | STORY-026 | Discover page UI                                 | ✅     | 2026-03-29 |
@@ -114,8 +114,8 @@
 
 ## EPIC-08 — PWA & Polish (Phase 7)
 
-| Story     | Title                               | Status | Completed |
-| --------- | ----------------------------------- | ------ | --------- |
+| Story     | Title                               | Status | Completed  |
+| --------- | ----------------------------------- | ------ | ---------- |
 | STORY-027 | PWA config + offline detection      | ✅     | 2026-03-29 |
 | STORY-028 | Onboarding modal + progress banner  | ✅     | 2026-03-29 |
 | STORY-029 | Performance audit (all NFR targets) | ✅     | 2026-03-30 |
@@ -124,14 +124,14 @@
 
 ## EPIC-09 — AI Research Hub (Phase 8 — v2.0)
 
-| Story      | Title                                                       | Status | Completed |
-| ---------- | ----------------------------------------------------------- | ------ | --------- |
+| Story      | Title                                                       | Status | Completed  |
+| ---------- | ----------------------------------------------------------- | ------ | ---------- |
 | STORY-030  | LLM key storage + settings UI                               | ✅     | 2026-03-30 |
 | STORY-031  | RAG document ingest pipeline — default knowledge base      | ✅     | 2026-03-30 |
-| STORY-031b | RAG user document upload + corpus management                | ⬜     | —        |
-| STORY-032  | Research endpoint — RAG + LLM routing (6 providers)        | ⬜     | —        |
-| STORY-032b | Research endpoint — allocation guard + provider unit tests | ⬜     | —        |
-| STORY-033  | Research Hub UI (structured cards + disclaimer)             | ⬜     | —        |
+| STORY-031b | RAG user document upload + corpus management                | ✅     | 2026-03-30 |
+| STORY-032  | Research endpoint — RAG + LLM routing (6 providers)        | ✅     | 2026-03-30 |
+| STORY-032b | Research endpoint — allocation guard + provider unit tests | ⬜     | —         |
+| STORY-033  | Research Hub UI (structured cards + disclaimer)             | ⬜     | —         |
 
 ---
 

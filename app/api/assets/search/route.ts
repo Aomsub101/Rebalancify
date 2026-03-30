@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const q = searchParams.get('q')
   const type = searchParams.get('type')
+  const platformType = searchParams.get('platformType')
 
   if (!q || q.trim() === '') {
     return NextResponse.json(
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
   if (type === 'stock') {
     return searchStocks(q, supabase)
   } else {
-    return searchCrypto(q, supabase)
+    return searchCrypto(q, supabase, platformType)
   }
 }
 
@@ -143,7 +144,7 @@ async function searchStocks(q: string, supabase: SupabaseClient) {
 // Crypto search (CoinGecko)
 // ---------------------------------------------------------------------------
 
-async function searchCrypto(q: string, supabase: SupabaseClient) {
+async function searchCrypto(q: string, supabase: SupabaseClient, platformType: string | null) {
   const apiKey = process.env.COINGECKO_API_KEY ?? ''
 
   let coins: CoinGeckoSearchCoin[]
@@ -200,13 +201,4 @@ async function searchCrypto(q: string, supabase: SupabaseClient) {
 
   return NextResponse.json(results)
 }
-usd != null
-      ? priceMap[coin.id].usd.toFixed(8)
-      : '0.00000000',
-  }))
 
-  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
-  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
-
-  return NextResponse.json(results)
-}

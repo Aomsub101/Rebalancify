@@ -39,6 +39,35 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-032: Research endpoint — RAG + LLM routing (6 providers)
+- **Completed:** 2026-03-30
+- **Scope:** `POST /api/research/:ticker` with RAG retrieval, news context, and 6-provider LLM routing.
+- **Gates passed:** type-check ✅ | test ✅ | build ✅ | RLS ✅ | auth ✅ | RAG retrieval ✅ | LLM routing (6 providers) ✅
+- **Notes:** Implemented `lib/llmRouter.ts` for unified provider access. Added `match_knowledge_chunks` RPC for similarity search.
+
+### STORY-031b: RAG user document upload + corpus management
+
+**Completed:** 2026-03-30
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `app/api/knowledge/upload/route.ts` — POST endpoint for PDF/MD uploads: auth guard, embedding key proxy, `pdf-parse` extraction, stable `document_id` generation, `knowledge_chunks` upsert with `source: 'upload'` metadata.
+- `app/api/knowledge/corpus-size/route.ts` — GET endpoint: calls Supabase RPC to monitor `knowledge_chunks` relation size.
+- `supabase/migrations/20_corpus_size_rpc.sql` — `get_corpus_size()` PostgreSQL function (SECURITY DEFINER).
+- `lib/pdfParser.ts` — text extraction wrapper for `pdf-parse` (v2.4.5 ESM class version).
+- `app/(dashboard)/settings/page.tsx` — Knowledge Base storage bar with 400MB (80%) warning banner.
+- `scripts/verify-hnsw.sql` — Manual verification script for HNSW index usage.
+
+**Decisions made:**
+- Used `pdf-parse` (v2.4.5 by Mehmet Kozan) instead of original `pdf-parse` because it has better ESM support, but required updating the import style to use the `PDFParse` class.
+- Generated stable `document_id` via `sha256(upload:fileName:userId)` to prevent duplicate ingestion of the same file by the same user.
+
+**Discovered issues / carry-over notes:**
+- Fixed pre-existing syntax errors (duplication at EOF) in `app/api/assets/search/route.ts` and `app/api/cron/drift-digest/route.ts` to pass quality gates.
+- `pdf-parse` version 2.4.5 has a named export `PDFParse` class, contradicting `@types/pdf-parse` (which expects a default function export). Updated implementation and mocks to match the class.
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅ | RLS ✅ | HNSW Index ✅ (schema verified)
+
 ### STORY-031 — RAG Document Ingest Pipeline
 **Completed:** 2026-03-30
 **Effort:** 0.5 day (estimated 3d)

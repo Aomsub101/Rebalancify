@@ -288,13 +288,4 @@ export async function GET(request: NextRequest) {
     schwabNotificationsInserted: schwabNotifInserted.length,
   })
 }
-   }
-  }
 
-  return NextResponse.json({
-    ok: true,
-    emailsSent: emailsSent.length,
-    emailsFailed: emailsFailed.length,
-    schwabNotificationsInserted: schwabNotifInserted.length,
-  })
-}
