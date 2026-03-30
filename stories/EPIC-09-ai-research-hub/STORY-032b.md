@@ -70,6 +70,6 @@ As a developer, the research endpoint correctly detects and rejects allocation p
 - [x] Security test documented
 - [x] `pnpm type-check` passes with zero TypeScript errors
 - [x] `pnpm test` passes with zero failures
-- [ ] `bd close <task-id> "STORY-032b complete — all DoD items verified"` run successfully (get the task ID from `bd ready` or `bd show`)
-- [ ] PROGRESS.md updated — story row marked ✅ with completion date
-- [ ] PROJECT_LOG.md updated — new entry added at the top of Completed Stories section using the entry template in that file
+- [x] `bd close <task-id> "STORY-032b complete — all DoD items verified"` run successfully (get the task ID from `bd ready` or `bd show`)
+- [x] PROGRESS.md updated — story row marked ✅ with completion date
+- [x] PROJECT_LOG.md updated — new entry added at the top of Completed Stories section using the entry template in that file
