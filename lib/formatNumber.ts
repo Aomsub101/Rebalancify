@@ -3,7 +3,7 @@ type QuantityContext = 'stock' | 'crypto'
 
 export function formatNumber(
   value: string | number,
-  type: 'price' | 'weight' | 'drift' | 'quantity' | 'staleness',
+  type: 'price' | 'weight' | 'weight-input' | 'drift' | 'quantity' | 'staleness',
   context?: PriceContext | QuantityContext
 ): string {
   const num = typeof value === 'string' ? parseFloat(value) : value
@@ -20,6 +20,12 @@ export function formatNumber(
     }
     case 'weight':
       return `${num.toFixed(2)}%`
+    case 'weight-input':
+      return num.toLocaleString('en-US', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+        useGrouping: false,
+      })
     case 'drift': {
       const fixed = Math.abs(num).toFixed(2)
       return num >= 0 ? `+${fixed}%` : `-${fixed}%`

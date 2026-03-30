@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useSession } from '@/contexts/SessionContext'
 import { useDirtyState } from '@/contexts/DirtyStateContext'
+import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { cn } from '@/lib/utils'
 
 async function fetchProfile() {
@@ -41,7 +42,7 @@ export function Sidebar() {
   const { isDirty, confirmNavigation } = useDirtyState()
 
   // AC #11: useQuery so silo count updates reactively after create/delete invalidations
-  const { data: profileData } = useQuery({
+  const { data: profileData, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: fetchProfile,
     enabled: !!session,
@@ -140,27 +141,33 @@ export function Sidebar() {
 
       {/* User menu */}
       <div className="border-t border-[var(--sidebar-border)] p-2">
-        <div className="flex items-center gap-3 px-2 py-2">
-          {/* Avatar */}
-          <div
-            className="h-8 w-8 rounded-md bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] flex items-center justify-center text-xs font-mono font-semibold shrink-0"
-            aria-hidden="true"
-          >
-            {initials}
+        {profileLoading ? (
+          <div className="px-2 py-2">
+            <LoadingSkeleton rows={1} />
           </div>
-          {/* Name + sign-out — desktop only */}
-          <div className="hidden lg:flex lg:flex-col lg:flex-1 min-w-0">
-            <span className="text-[var(--sidebar-foreground)] text-sm font-medium truncate">
-              {displayName ?? sessionProfile?.email ?? '—'}
-            </span>
-            <button
-              onClick={handleSignOut}
-              className="text-left text-xs text-[var(--sidebar-accent-foreground)] hover:text-[var(--sidebar-foreground)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-ring)] focus-visible:rounded-sm"
+        ) : (
+          <div className="flex items-center gap-3 px-2 py-2">
+            {/* Avatar */}
+            <div
+              className="h-8 w-8 rounded-md bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] flex items-center justify-center text-xs font-mono font-semibold shrink-0"
+              aria-hidden="true"
             >
-              Sign out
-            </button>
+              {initials}
+            </div>
+            {/* Name + sign-out — desktop only */}
+            <div className="hidden lg:flex lg:flex-col lg:flex-1 min-w-0">
+              <span className="text-[var(--sidebar-foreground)] text-sm font-medium truncate">
+                {displayName ?? sessionProfile?.email ?? '—'}
+              </span>
+              <button
+                onClick={handleSignOut}
+                className="text-left text-xs text-[var(--sidebar-accent-foreground)] hover:text-[var(--sidebar-foreground)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--sidebar-ring)] focus-visible:rounded-sm"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   )

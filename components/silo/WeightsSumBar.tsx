@@ -1,5 +1,10 @@
+import React from 'react'
 import { WeightsSumWarning } from '@/components/silo/WeightsSumWarning'
 import { formatNumber } from '@/lib/formatNumber'
+
+function segmentWidth(pct: number): React.CSSProperties {
+  return { width: `${Math.max(0, pct)}%` }
+}
 
 interface HoldingSlice {
   ticker: string
@@ -24,7 +29,7 @@ export function WeightsSumBar({ holdings, weightsSumPct }: Props) {
           <div
             key={h.ticker}
             className="h-full bg-primary opacity-80"
-            style={{ width: `${Math.max(0, h.current_weight_pct)}%` }}
+            style={segmentWidth(h.current_weight_pct)}
             title={`${h.ticker}: ${formatNumber(h.current_weight_pct, 'weight')}`}
           />
         ))}

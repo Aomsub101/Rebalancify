@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import Link from 'next/link'
+import { formatNumber } from '@/lib/formatNumber'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ function SnapshotDetail({ snapshot }: { snapshot: Record<string, unknown> | null
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground">{h.price}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground">{h.value}</td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground">
-                    {typeof h.weight_pct === 'number' ? `${h.weight_pct.toFixed(2)}%` : '—'}
+                    {typeof h.weight_pct === 'number' ? formatNumber(h.weight_pct, 'weight') : '—'}
                   </td>
                 </tr>
               ))}

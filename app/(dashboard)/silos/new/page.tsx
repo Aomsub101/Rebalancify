@@ -216,7 +216,7 @@ export default function NewSiloPage() {
           </p>
         </div>
 
-        {/* Actions — no <form> tag per CLAUDE.md Rule 1 */}
+        {/* Actions — no form tag per CLAUDE.md Rule 1 */}
         <div className="flex items-center justify-end gap-3 pt-2">
           <Link
             href="/silos"

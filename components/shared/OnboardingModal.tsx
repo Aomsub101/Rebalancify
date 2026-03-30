@@ -3,7 +3,7 @@
  *
  * STORY-028 AC-2, AC-3, AC-5, AC-6, AC-10
  * CLAUDE.md Rule 10: Non-dismissible via ESC or backdrop click (same pattern as ConfirmDialog).
- * CLAUDE.md Rule 1: No <form> tags — uses onClick + controlled state.
+ * CLAUDE.md Rule 1: No form tags — uses onClick + controlled state.
  */
 'use client'
 

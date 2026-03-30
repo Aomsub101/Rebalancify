@@ -2,8 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { Plus, AlertCircle } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { SiloCard } from '@/components/silo/SiloCard'
+import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { cn } from '@/lib/utils'
 
 // Metadata for 'use client' pages is set in the nearest server layout
@@ -39,15 +41,7 @@ export default function SilosPage() {
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="h-8 w-32 bg-secondary rounded animate-pulse" />
-          <div className="h-9 w-28 bg-secondary rounded-md animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-36 bg-card rounded-lg border border-border animate-pulse" />
-          ))}
-        </div>
+        <LoadingSkeleton rows={3} />
       </div>
     )
   }
@@ -55,13 +49,7 @@ export default function SilosPage() {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div
-          role="alert"
-          className="flex items-center gap-2 rounded-lg border border-negative/30 bg-negative-bg px-4 py-3 text-negative text-sm"
-        >
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Failed to load silos. Please refresh the page.
-        </div>
+        <ErrorBanner message="Failed to load silos. Please refresh the page." />
       </div>
     )
   }

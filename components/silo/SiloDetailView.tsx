@@ -14,6 +14,7 @@ import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { useDirtyGuard } from '@/hooks/useDirtyGuard'
 import type { HoldingsResponse } from '@/lib/types/holdings'
+import { formatNumber } from '@/lib/formatNumber'
 
 interface SiloData {
   id: string
@@ -53,7 +54,7 @@ export function SiloDetailView({ silo }: Props) {
   useEffect(() => {
     if (!data) return
     const fromServer: Record<string, string> = Object.fromEntries(
-      data.holdings.map(h => [h.asset_id, h.target_weight_pct.toFixed(3)])
+      data.holdings.map(h => [h.asset_id, formatNumber(h.target_weight_pct, 'weight-input')])
     )
     setLocalWeights(prev => {
       // Keep any unsaved local edits; only add new assets from server

@@ -40,7 +40,7 @@ export function HoldingRow({
       const res = await fetch(`/api/silos/${siloId}/holdings/${holding.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: new Decimal(newQuantity).toFixed(8) }),
+        body: JSON.stringify({ quantity: new Decimal(newQuantity).toDecimalPlaces(8).toString() }),
       })
       if (!res.ok) throw new Error('Failed to update')
       return res.json()

@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bell, DollarSign } from 'lucide-react'
 import { useSession } from '@/contexts/SessionContext'
+import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { cn } from '@/lib/utils'
 
 async function fetchProfile() {
@@ -50,7 +51,7 @@ export function TopBar() {
   const queryClient = useQueryClient()
   const isOverview = pathname.startsWith('/overview')
 
-  const { data: profileData } = useQuery({
+  const { data: profileData, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: fetchProfile,
     enabled: !!session,
@@ -126,24 +127,30 @@ export function TopBar() {
           </div>
         )}
 
-        <button
-          className="relative flex items-center justify-center h-9 w-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={
-            notificationCount > 0
-              ? `${notificationCount} unread notifications`
-              : 'Notifications'
-          }
-        >
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          {notificationCount > 0 && (
-            <span
-              className="absolute -top-0.5 -right-0.5 flex items-center justify-center h-4 w-4 rounded-full bg-negative text-white text-[10px] font-mono"
-              aria-hidden="true"
-            >
-              {notificationCount > 9 ? '9+' : notificationCount}
-            </span>
-          )}
-        </button>
+        {profileLoading ? (
+          <div className="w-9">
+            <LoadingSkeleton rows={1} />
+          </div>
+        ) : (
+          <button
+            className="relative flex items-center justify-center h-9 w-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={
+              notificationCount > 0
+                ? `${notificationCount} unread notifications`
+                : 'Notifications'
+            }
+          >
+            <Bell className="h-5 w-5" aria-hidden="true" />
+            {notificationCount > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 flex items-center justify-center h-4 w-4 rounded-full bg-negative text-white text-[10px] font-mono"
+                aria-hidden="true"
+              >
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </header>
   )
