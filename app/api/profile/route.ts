@@ -154,6 +154,19 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // LLM credentials — STORY-030 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
+  if ('llm_provider' in body) allowed.llm_provider = body.llm_provider
+  if ('llm_model' in body) allowed.llm_model = body.llm_model
+  if ('llm_key' in body && typeof body.llm_key === 'string' && body.llm_key.length > 0) {
+    if (!encKey) {
+      return NextResponse.json(
+        { error: { code: 'ENCRYPTION_KEY_MISSING', message: 'Server encryption key not configured' } },
+        { status: 500 },
+      )
+    }
+    allowed.llm_key_enc = encrypt(body.llm_key, encKey)
+  }
+
   if (Object.keys(allowed).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })
   }

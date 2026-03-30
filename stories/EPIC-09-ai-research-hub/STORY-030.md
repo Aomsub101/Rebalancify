@@ -48,12 +48,12 @@ As a user wanting to use the AI Research Hub, I can store my LLM API key from on
 
 ## Tasks
 
-- [ ] Update `app/api/profile/route.ts` PATCH: LLM key encryption
-- [ ] Update Settings page: add `LLMSection` below broker sections
-- [ ] Write `ProviderSelector` and `ModelSelector` components
-- [ ] Add key validation ping call (optional lightweight verify on save)
-- [ ] Security test: LLM key not in any response
-- [ ] Unit test: encryption round trip (same as broker key test)
+- [x] Update `app/api/profile/route.ts` PATCH: LLM key encryption
+- [x] Update Settings page: add `LLMSection` below broker sections
+- [x] Write `ProviderSelector` and `ModelSelector` components
+- [x] Add key validation ping call (optional lightweight verify on save)
+- [x] Security test: LLM key not in any response
+- [x] Unit test: encryption round trip (same as broker key test)
 
 ---
 

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LLM_PROVIDERS, getDefaultModel, getModelsForProvider } from '@/lib/llmProviders'
 
 interface ProfileData {
   id: string
@@ -20,6 +21,9 @@ interface ProfileData {
   schwab_connected: boolean
   schwab_token_expired: boolean
   webull_connected: boolean
+  llm_connected: boolean
+  llm_provider: string | null
+  llm_model: string | null
 }
 
 async function fetchProfile(): Promise<ProfileData> {
@@ -95,6 +99,15 @@ export default function SettingsPage() {
   const [isSavingWebull, setIsSavingWebull] = useState(false)
   const [webullSaved, setWebullSaved] = useState(false)
 
+  // LLM state — STORY-030
+  const [llmProvider, setLlmProvider] = useState('')
+  const [llmModel, setLlmModel] = useState('')
+  const [llmKey, setLlmKey] = useState('')
+  const [showLlmKey, setShowLlmKey] = useState(false)
+  const [isSavingLlm, setIsSavingLlm] = useState(false)
+  const [llmSaved, setLlmSaved] = useState(false)
+  const [llmValidationError, setLlmValidationError] = useState<string | null>(null)
+
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? '')
@@ -108,6 +121,9 @@ export default function SettingsPage() {
       setSchwabConnected(profile.schwab_connected)
       setSchwabTokenExpired(profile.schwab_token_expired)
       setWebullSaved(profile.webull_connected)
+      setLlmSaved(profile.llm_connected)
+      if (profile.llm_provider) setLlmProvider(profile.llm_provider)
+      if (profile.llm_model) setLlmModel(profile.llm_model)
     }
   }, [profile])
 
@@ -263,6 +279,51 @@ export default function SettingsPage() {
       setSaveError(err instanceof Error ? err.message : 'Failed to save Webull credentials.')
     } finally {
       setIsSavingWebull(false)
+    }
+  }
+
+  async function handleSaveLLM() {
+    setLlmValidationError(null)
+    setSaveError(null)
+    if (!llmProvider) {
+      setLlmValidationError('Please select a provider.')
+      return
+    }
+    if (!llmKey.trim() && !llmSaved) {
+      setLlmValidationError('Please enter your API key.')
+      return
+    }
+    setIsSavingLlm(true)
+    try {
+      // Validate key first if a new key was entered (AC7)
+      if (llmKey.trim()) {
+        const validateRes = await fetch('/api/llm/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: llmProvider, key: llmKey.trim() }),
+        })
+        const validateData = await validateRes.json()
+        if (!validateRes.ok || !validateData.valid) {
+          setLlmValidationError('Key validation failed — check your API key.')
+          return
+        }
+      }
+
+      const fields: Record<string, unknown> = {
+        llm_provider: llmProvider,
+        llm_model: llmModel,
+      }
+      if (llmKey.trim()) fields.llm_key = llmKey.trim()
+      await patchProfile(fields)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      setLlmKey('')
+      setShowLlmKey(false)
+      setLlmSaved(true)
+      toast.success('AI Research Hub settings saved.')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save LLM settings.')
+    } finally {
+      setIsSavingLlm(false)
     }
   }
 
@@ -987,6 +1048,165 @@ export default function SettingsPage() {
             )}
           >
             {isSavingWebull ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
+
+      {/* LLM section — STORY-030: AC3, AC4, AC5, AC6, AC7 */}
+      <section aria-labelledby="llm-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 id="llm-heading" className="text-xl font-medium text-foreground">AI Research Hub</h2>
+          {/* Connection status dot — AC6 */}
+          <div className="flex items-center gap-1.5 text-sm">
+            {llmSaved ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-positive" aria-hidden="true" />
+                <span className="text-positive">Connected</span>
+              </>
+            ) : (
+              <>
+                <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/50 inline-block" aria-hidden="true" />
+                <span className="text-muted-foreground">Not connected</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* FreeTierNote — AC3 */}
+        <p className="text-sm text-muted-foreground mb-4">
+          Bring your own API key from any supported provider.{' '}
+          <span className="text-foreground/80">
+            Gemini 2.0 Flash (Google AI Studio), Llama 3.3 70B (Groq), and DeepSeek V3 are free.
+          </span>
+        </p>
+
+        {/* Key validation error — AC7 */}
+        {llmValidationError && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-lg border border-negative/30 bg-negative-bg px-4 py-3 text-negative text-sm mb-4"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {llmValidationError}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* ProviderSelector — AC4 */}
+          <div>
+            <label htmlFor="llm-provider" className="block text-sm font-medium text-foreground mb-1.5">
+              Provider
+            </label>
+            <select
+              id="llm-provider"
+              value={llmProvider}
+              onChange={(e) => {
+                const newProvider = e.target.value
+                setLlmProvider(newProvider)
+                setLlmModel(getDefaultModel(newProvider))
+                setLlmValidationError(null)
+              }}
+              className={cn(
+                'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground',
+                'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+            >
+              <option value="">Select a provider…</option>
+              {LLM_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}{p.free ? ' (Free)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ModelSelector — AC5 */}
+          {llmProvider && (
+            <div>
+              <label htmlFor="llm-model" className="block text-sm font-medium text-foreground mb-1.5">
+                Model
+              </label>
+              {getModelsForProvider(llmProvider).length > 0 ? (
+                <select
+                  id="llm-model"
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                  className={cn(
+                    'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground',
+                    'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
+                >
+                  {getModelsForProvider(llmProvider).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              ) : (
+                // OpenRouter: user types the model ID manually
+                <input
+                  id="llm-model"
+                  type="text"
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                  placeholder="e.g. openai/gpt-4o"
+                  className={cn(
+                    'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground',
+                    'placeholder:text-muted-foreground',
+                    'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
+                />
+              )}
+            </div>
+          )}
+
+          {/* LLMKeyInput — AC6: type="password" with show/hide, ••••••••after save */}
+          <div>
+            <label htmlFor="llm-key" className="block text-sm font-medium text-foreground mb-1.5">
+              API Key
+            </label>
+            <div className="relative">
+              <input
+                id="llm-key"
+                type={showLlmKey ? 'text' : 'password'}
+                value={llmKey}
+                onChange={(e) => {
+                  setLlmKey(e.target.value)
+                  setLlmValidationError(null)
+                }}
+                placeholder={llmSaved ? '••••••••' : 'Paste your API key'}
+                autoComplete="off"
+                className={cn(
+                  'w-full rounded-md border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground',
+                  'placeholder:text-muted-foreground',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowLlmKey(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-label={showLlmKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showLlmKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Your key is encrypted with AES-256-GCM and never exposed in any API response.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={handleSaveLLM}
+            disabled={isSavingLlm || !llmProvider}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground',
+              'hover:bg-primary/90 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+            )}
+          >
+            {isSavingLlm ? 'Saving…' : 'Save'}
           </button>
         </div>
       </section>
