@@ -59,6 +59,29 @@ function makeTargetWeightsMock(data: unknown[] = []) {
   }
 }
 
+function makeAssetMock(data: { ticker: string; price_source: string } | null = { ticker: 'AAPL', price_source: 'finnhub' }) {
+  return {
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data, error: null }),
+      }),
+    }),
+  }
+}
+
+function makePriceCacheMock(exists: boolean = false) {
+  return {
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: exists ? { asset_id: ASSET_ID } : null,
+          error: null,
+        }),
+      }),
+    }),
+  }
+}
+
 const HOLDING_ROW = {
   id: HOLDING_ID,
   asset_id: ASSET_ID,
@@ -174,6 +197,8 @@ describe('POST /api/silos/[silo_id]/holdings', () => {
     mockFrom
       .mockReturnValueOnce(makeSiloMock())
       .mockReturnValueOnce({ upsert: upsertFn })
+      .mockReturnValueOnce(makeAssetMock())
+      .mockReturnValueOnce(makePriceCacheMock(false))
 
     const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`, {
       method: 'POST',
@@ -213,6 +238,8 @@ describe('POST /api/silos/[silo_id]/holdings', () => {
     mockFrom
       .mockReturnValueOnce(makeSiloMock())
       .mockReturnValueOnce({ upsert: upsertFn })
+      .mockReturnValueOnce(makeAssetMock())
+      .mockReturnValueOnce(makePriceCacheMock(false))
 
     const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`, {
       method: 'POST',

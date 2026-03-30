@@ -41,6 +41,9 @@ export async function fetchPrice(
       throw new Error(`Finnhub quote failed: ${response.status}`)
     }
     const json = await response.json() as { c: number }
+    if (json.c === 0) {
+      throw new Error(`Finnhub returned zero price for ${ticker}`)
+    }
     price = json.c.toFixed(8)
   } else {
     const id = coingeckoId ?? ticker.toLowerCase()
@@ -50,7 +53,11 @@ export async function fetchPrice(
       throw new Error(`CoinGecko price failed: ${response.status}`)
     }
     const json = await response.json() as Record<string, { usd: number }>
-    price = json[id].usd.toFixed(8)
+    const rawPrice = json[id]?.usd
+    if (rawPrice === undefined || rawPrice === 0) {
+      throw new Error(`CoinGecko returned zero or missing price for ${id}`)
+    }
+    price = rawPrice.toFixed(8)
   }
 
   // Tier 3: Upsert into price_cache

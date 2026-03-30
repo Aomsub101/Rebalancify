@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { computeDriftState } from '@/lib/drift'
+import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -32,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 2. Fetch holdings with assets joined
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, cost_basis, cash_balance, source, last_updated_at, assets(ticker, name, asset_type)')
+    .select('id, asset_id, quantity, cost_basis, cash_balance, source, last_updated_at, assets(ticker, name, asset_type, price_source)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -57,6 +58,25 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Build lookup maps
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
+
+  // Fetch prices for uncached assets on-demand (Bug fix: uncached assets defaulted to 0)
+  const assetInfoMap = new Map(rows.map(h => {
+    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; price_source: string }
+    return [h.asset_id, asset]
+  }))
+
+  const uncachedAssetIds = assetIds.filter(id => !priceMap.has(id))
+  await Promise.all(uncachedAssetIds.map(async (assetId) => {
+    const asset = assetInfoMap.get(assetId)
+    if (!asset) return
+    const priceSource = asset.price_source as 'finnhub' | 'coingecko'
+    try {
+      const result = await fetchPrice(supabase, assetId, asset.ticker, priceSource)
+      priceMap.set(assetId, result.price)
+    } catch {
+      // non-fatal: leave priceMap entry missing; holdings calculation will use '0'
+    }
+  }))
 
   // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
   const cashBalance = rows.reduce((sum, h) =>
@@ -168,6 +188,30 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   if (upsertError || !holding) {
     return NextResponse.json({ error: { code: 'INSERT_FAILED', message: 'Failed to create holding' } }, { status: 500 })
+  }
+
+  // Fetch and cache price for newly created manual holding (Bug fix: uncached assets defaulted to 0)
+  const { data: assetData } = await supabase
+    .from('assets')
+    .select('ticker, price_source')
+    .eq('id', asset_id)
+    .single()
+
+  if (assetData) {
+    const { data: existingPrice } = await supabase
+      .from('price_cache')
+      .select('asset_id')
+      .eq('asset_id', asset_id)
+      .single()
+
+    if (!existingPrice) {
+      const priceSource = assetData.price_source as 'finnhub' | 'coingecko'
+      try {
+        await fetchPrice(supabase, asset_id, assetData.ticker, priceSource)
+      } catch {
+        // non-fatal: price will be fetched on next holdings request
+      }
+    }
   }
 
   return NextResponse.json(holding, { status: 201 })
