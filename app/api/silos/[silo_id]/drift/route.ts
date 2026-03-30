@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { computeDriftState } from '@/lib/drift'
+import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -32,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 2. Fetch holdings with asset join
   const { data: holdingsData } = await supabase
     .from('holdings')
-    .select('asset_id, quantity, cash_balance, assets(ticker, name)')
+    .select('asset_id, quantity, cash_balance, assets(ticker, name, price_source)')
     .eq('silo_id', silo_id)
 
   const rows = holdingsData ?? []
@@ -53,6 +54,28 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Build lookup maps
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, tw.weight_pct as string]))
+
+  // 4b. On-demand fetch for uncached assets (Bug fix: Alpaca/Webull sync never cached prices)
+  const assetInfoMap = new Map(rows.map(h => {
+    const asset = h.assets as unknown as { ticker: string; name: string; price_source: string }
+    return [h.asset_id, asset]
+  }))
+
+  const uncachedAssetIds = assetIds.filter(id => !priceMap.has(id))
+  await Promise.all(uncachedAssetIds.map(async (assetId) => {
+    const asset = assetInfoMap.get(assetId)
+    if (!asset) return
+    // Resolve price_source: alpaca → finnhub, bitkub → coingecko
+    const resolvedSource = asset.price_source === 'alpaca' ? 'finnhub'
+      : asset.price_source === 'bitkub' ? 'coingecko'
+      : asset.price_source
+    try {
+      const result = await fetchPrice(supabase, assetId, asset.ticker, resolvedSource as 'finnhub' | 'coingecko')
+      priceMap.set(assetId, result.price)
+    } catch {
+      // non-fatal: price stays 0
+    }
+  }))
 
   // Compute silo total value (holdings value + cash balances)
   const totalValue = rows.reduce((sum, h) => {

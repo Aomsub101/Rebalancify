@@ -11,9 +11,15 @@ export async function fetchPrice(
   supabase: SupabaseClient,
   assetId: string,
   ticker: string,
-  source: 'finnhub' | 'coingecko',
+  source: 'finnhub' | 'coingecko' | 'alpaca' | 'bitkub',
   coingeckoId?: string
 ): Promise<PriceResult> {
+  // Resolve actual price source — 'alpaca' stocks go through Finnhub, 'bitkub' goes through CoinGecko
+  const actualSource: 'finnhub' | 'coingecko' =
+    source === 'alpaca' ? 'finnhub' :
+    source === 'bitkub' ? 'coingecko' :
+    source
+
   // Tier 1: Check price_cache_fresh view
   const { data: cacheRow } = await supabase
     .from('price_cache_fresh')
@@ -34,7 +40,7 @@ export async function fetchPrice(
   let price: string
   let currency = 'USD'
 
-  if (source === 'finnhub') {
+  if (actualSource === 'finnhub') {
     const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`
     const response = await fetch(url)
     if (!response.ok) {
@@ -60,19 +66,19 @@ export async function fetchPrice(
     price = rawPrice.toFixed(8)
   }
 
-  // Tier 3: Upsert into price_cache
+  // Tier 3: Upsert into price_cache — store actualSource so cache reflects the real API used
   await supabase.from('price_cache').upsert({
     asset_id: assetId,
     price,
     currency,
-    source,
+    source: actualSource,
     fetched_at: new Date().toISOString(),
   })
 
   return {
     price,
     currency,
-    source,
+    source: actualSource,
     fromCache: false,
   }
 }

@@ -69,9 +69,12 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   await Promise.all(uncachedAssetIds.map(async (assetId) => {
     const asset = assetInfoMap.get(assetId)
     if (!asset) return
-    const priceSource = asset.price_source as 'finnhub' | 'coingecko'
+    // Resolve price_source: alpaca → finnhub, bitkub → coingecko
+    const resolvedSource = asset.price_source === 'alpaca' ? 'finnhub'
+      : asset.price_source === 'bitkub' ? 'coingecko'
+      : asset.price_source
     try {
-      const result = await fetchPrice(supabase, assetId, asset.ticker, priceSource)
+      const result = await fetchPrice(supabase, assetId, asset.ticker, resolvedSource as 'finnhub' | 'coingecko')
       priceMap.set(assetId, result.price)
     } catch {
       // non-fatal: leave priceMap entry missing; holdings calculation will use '0'

@@ -185,13 +185,15 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   for (const pos of positions) {
     const assetType = pos.asset_class === 'crypto' ? 'crypto' : 'stock'
+    // Price source: stocks → Finnhub, crypto → CoinGecko (Alpaca has no public price API)
+    const priceSource = assetType === 'crypto' ? 'coingecko' : 'finnhub'
 
     // Find or create the asset record (unique on ticker + price_source)
     const { data: existingAsset } = await supabase
       .from('assets')
       .select('id')
       .eq('ticker', pos.symbol)
-      .eq('price_source', 'alpaca')
+      .eq('price_source', priceSource)
       .maybeSingle()
 
     let assetId: string
@@ -204,7 +206,7 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
           ticker: pos.symbol,
           name: pos.symbol,
           asset_type: assetType,
-          price_source: 'alpaca',
+          price_source: priceSource,
         })
         .select('id')
         .single()
@@ -238,6 +240,13 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
       )
 
     if (!holdingErr) holdingsUpdated++
+
+    // Fetch and cache price — stocks via Finnhub, crypto via CoinGecko
+    try {
+      await fetchPrice(supabase, assetId, pos.symbol, priceSource)
+    } catch {
+      // non-fatal — stale cache remains
+    }
   }
 
   // 5. Store account cash: reset all holdings' cash_balance to 0,
@@ -254,7 +263,6 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
       .from('assets')
       .select('id')
       .eq('ticker', positions[0].symbol)
-      .eq('price_source', 'alpaca')
       .maybeSingle()
 
     if (firstAsset) {
@@ -1084,6 +1092,13 @@ async function syncWebull(
       )
 
     if (!holdingErr) holdingsUpdated++
+
+    // Fetch and cache price via Finnhub (Webull holds US stocks)
+    try {
+      await fetchPrice(supabase, assetId, pos.ticker, 'finnhub')
+    } catch {
+      // non-fatal — stale cache remains
+    }
   }
 
   // 4. AC2: update silo.last_synced_at
