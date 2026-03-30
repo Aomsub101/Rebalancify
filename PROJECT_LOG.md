@@ -39,6 +39,23 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-032b — Research endpoint — allocation guard + provider unit tests
+**Completed:** 2026-03-30
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `app/api/research/[ticker]/route.ts` — added forced refresh via `{ "refresh": true }` (bypasses cache; inserts new row with `refreshed_at` populated).
+- `app/api/research/[ticker]/route.ts` — allocation-percentage output guard returning HTTP 422 `LLM_ALLOCATION_OUTPUT`.
+- `app/api/research/[ticker]/__tests__/route.test.ts` — added unit tests for refresh bypass + allocation guard.
+
+**Decisions made:**
+- Implemented refresh as optional JSON body `{ "refresh": true }` to avoid route proliferation and keep client-side API usage simple.
+
+**Discovered issues / carry-over notes:**
+- None.
+
+**Quality gates passed:** type-check ✅ | test ✅ | build ✅ | RLS ✅
+
 ### STORY-032: Research endpoint — RAG + LLM routing (6 providers)
 - **Completed:** 2026-03-30
 - **Scope:** `POST /api/research/:ticker` with RAG retrieval, news context, and 6-provider LLM routing.

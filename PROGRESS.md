@@ -130,7 +130,7 @@
 | STORY-031  | RAG document ingest pipeline — default knowledge base      | ✅     | 2026-03-30 |
 | STORY-031b | RAG user document upload + corpus management                | ✅     | 2026-03-30 |
 | STORY-032  | Research endpoint — RAG + LLM routing (6 providers)        | ✅     | 2026-03-30 |
-| STORY-032b | Research endpoint — allocation guard + provider unit tests | ⬜     | —         |
+| STORY-032b | Research endpoint — allocation guard + provider unit tests | ✅     | 2026-03-30 |
 | STORY-033  | Research Hub UI (structured cards + disclaimer)             | ⬜     | —         |
 
 ---
