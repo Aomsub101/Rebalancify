@@ -250,12 +250,11 @@ export function calculateRebalance(input: EngineInput): EngineResult {
       continue
     }
 
-    // Skip orphaned holdings: assets in holdings but with no assigned target weight.
-    // These were never entered into the target_weights table, so the user has not
-    // expressed an intent to hold or sell them — they should be left alone silently.
-    // This does NOT affect assets with explicit weight_pct = 0 (those are in weightMap
-    // with a value of 0, so !targetWeightPct is false for them).
-    if (!targetWeightPct) {
+    // Skip orphaned holdings: assets in holdings but with no entry in target_weights.
+    // Assets with explicit weight_pct = 0 are NOT skipped — they get a SELL order
+    // to exit the position. weightMap.has() returns false for undefined (no entry)
+    // and true for 0 (explicit zero weight), which is the correct distinction.
+    if (!weightMap.has(assetId)) {
       continue
     }
 
