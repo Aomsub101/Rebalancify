@@ -15,6 +15,7 @@ export interface Holding {
   drift_breached: boolean
   source: string
   stale_days: number
+  age_days: number
   last_updated_at: string
 }
 

@@ -19,6 +19,7 @@ interface Props {
 
 export function WeightsSumBar({ holdings, weightsSumPct }: Props) {
   const cashTargetPct = Math.max(0, 100 - weightsSumPct)
+  const isOverWeight = holdings.length > 0 && weightsSumPct > 100.001
   const sumWarning = holdings.length > 0 && Math.abs(weightsSumPct - 100) > 0.001
 
   return (
@@ -36,7 +37,11 @@ export function WeightsSumBar({ holdings, weightsSumPct }: Props) {
       </div>
       {/* AC6 — WeightsSumWarning with exact substituted text */}
       {sumWarning && (
-        <WeightsSumWarning weightsSumPct={weightsSumPct} cashTargetPct={cashTargetPct} />
+        <WeightsSumWarning
+          weightsSumPct={weightsSumPct}
+          cashTargetPct={cashTargetPct}
+          variant={isOverWeight ? 'over' : 'under'}
+        />
       )}
     </div>
   )

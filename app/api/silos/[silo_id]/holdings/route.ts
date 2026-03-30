@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 2. Fetch holdings with assets joined
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, cost_basis, cash_balance, source, last_updated_at, assets(ticker, name, asset_type, price_source)')
+    .select('id, asset_id, quantity, cost_basis, cash_balance, source, last_updated_at, acquired_at, assets(ticker, name, asset_type, price_source)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -106,6 +106,11 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     const driftPct = currentWeightPct.minus(targetWeightPct)
     const driftPctNum = parseFloat(driftPct.toFixed(3))
     const staleDays = Math.floor((now - new Date(h.last_updated_at as string).getTime()) / 86_400_000)
+    // Age: days since the asset was first acquired (or re-acquired after a sell-out)
+    // acquired_at may be NULL for holdings with quantity = 0 (never acquired)
+    const acquiredAt = (h as unknown as { acquired_at?: string | null }).acquired_at
+    const ageMs = acquiredAt ? now - new Date(acquiredAt).getTime() : 0
+    const ageDays = ageMs > 0 ? Math.floor(ageMs / 86_400_000) : 0
 
     return {
       id: h.id,
@@ -124,6 +129,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       drift_breached: driftPct.abs().gt(new Decimal(silo.drift_threshold)),
       source: h.source,
       stale_days: staleDays,
+      age_days: ageDays,
       last_updated_at: h.last_updated_at,
     }
   })
@@ -171,6 +177,21 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'INVALID_VALUE', message: 'quantity must be a non-negative number' } }, { status: 400 })
   }
 
+  // Check if this asset was previously held and what its quantity was (for acquired_at logic)
+  const { data: existingHolding } = await supabase
+    .from('holdings')
+    .select('quantity, acquired_at')
+    .eq('silo_id', silo_id)
+    .eq('asset_id', asset_id)
+    .single()
+
+  const newQty = quantity ?? '0.00000000'
+  const prevQty = existingHolding?.quantity ?? '0'
+  const prevQtyNum = new Decimal(prevQty)
+  const newQtyNum = new Decimal(newQty)
+  // Set acquired_at when quantity first goes from 0 to >0 (new acquisition or re-buy after sell-out)
+  const shouldSetAcquiredAt = newQtyNum.gt(0) && prevQtyNum.lte(0)
+
   // Note: 'price' field is intentionally ignored — never stored in holdings
   const { data: holding, error: upsertError } = await supabase
     .from('holdings')
@@ -178,15 +199,17 @@ export async function POST(request: NextRequest, { params }: { params: Params })
       {
         silo_id,
         asset_id,
-        quantity: quantity ?? '0.00000000',
+        quantity: newQty,
         cost_basis: cost_basis ?? null,
         cash_balance: cash_balance ?? '0.00000000',
         source: 'manual',
         last_updated_at: new Date().toISOString(),
+        // Set acquired_at on first acquisition (when qty goes from 0 to >0)
+        ...(shouldSetAcquiredAt ? { acquired_at: new Date().toISOString() } : {}),
       },
       { onConflict: 'silo_id,asset_id' }
     )
-    .select('id, asset_id, silo_id, quantity, cost_basis, cash_balance, source, last_updated_at')
+    .select('id, asset_id, silo_id, quantity, cost_basis, cash_balance, source, last_updated_at, acquired_at')
     .single()
 
   if (upsertError || !holding) {

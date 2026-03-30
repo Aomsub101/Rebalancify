@@ -114,21 +114,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     assets: { ticker: string }
   }>
 
-  const assetIds = holdingsRows.map(h => h.asset_id)
-
-  // -------------------------------------------------------------------------
-  // Fetch prices
-  // -------------------------------------------------------------------------
-
-  const { data: priceData } = await supabase
-    .from('price_cache')
-    .select('asset_id, price')
-    .in('asset_id', assetIds.length > 0 ? assetIds : ['00000000-0000-0000-0000-000000000000'])
-
-  const priceMap = new Map<string, string>(
-    (priceData ?? []).map(p => [p.asset_id, String(p.price)]),
-  )
-
   // -------------------------------------------------------------------------
   // Fetch target weights
   // -------------------------------------------------------------------------
@@ -148,7 +133,41 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   const weightRows = (weightData ?? []) as Array<{ asset_id: string; weight_pct: string }>
 
   // -------------------------------------------------------------------------
-  // Build engine input (skip holdings with no price data)
+  // Collect ALL asset IDs: holdings + weights (weight-only assets need prices too)
+  // -------------------------------------------------------------------------
+
+  const holdingIds = holdingsRows.map(h => h.asset_id)
+  const weightIds = weightRows.map(w => w.asset_id)
+  const allAssetIds = [...new Set([...holdingIds, ...weightIds])]
+
+  // -------------------------------------------------------------------------
+  // Fetch prices for ALL assets (including weight-only)
+  // -------------------------------------------------------------------------
+
+  const { data: priceData } = await supabase
+    .from('price_cache')
+    .select('asset_id, price')
+    .in('asset_id', allAssetIds.length > 0 ? allAssetIds : ['00000000-0000-0000-0000-000000000000'])
+
+  const priceMap = new Map<string, string>(
+    (priceData ?? []).map(p => [p.asset_id, String(p.price)]),
+  )
+
+  // -------------------------------------------------------------------------
+  // Fetch tickers for all assets (including weight-only)
+  // -------------------------------------------------------------------------
+
+  const { data: assetData } = await supabase
+    .from('assets')
+    .select('id, ticker')
+    .in('id', allAssetIds.length > 0 ? allAssetIds : ['00000000-0000-0000-0000-000000000000'])
+
+  const assetTickerMap = new Map<string, string>(
+    (assetData ?? []).map(a => [a.id, a.ticker]),
+  )
+
+  // -------------------------------------------------------------------------
+  // Build engine input: holdings + zero-qty entries for weight-only assets
   // -------------------------------------------------------------------------
 
   const engineHoldings: EngineHolding[] = holdingsRows
@@ -159,6 +178,19 @@ export async function POST(request: NextRequest, { params }: { params: Params })
       cash_balance: String(h.cash_balance),
       price: priceMap.get(h.asset_id) ?? '0',
     }))
+
+  // Include weight-only assets (no current holding) so the engine can compute BUY orders
+  for (const w of weightRows) {
+    if (!holdingIds.includes(w.asset_id)) {
+      engineHoldings.push({
+        asset_id: w.asset_id,
+        ticker: assetTickerMap.get(w.asset_id) ?? w.asset_id,
+        quantity: '0.00000000',
+        cash_balance: '0.00000000',
+        price: priceMap.get(w.asset_id) ?? '0',
+      })
+    }
+  }
 
   const engineWeights: EngineWeight[] = weightRows.map(w => ({
     asset_id: w.asset_id,
