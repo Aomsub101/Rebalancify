@@ -184,6 +184,15 @@ def fetch_prices(tickers: list[str], supabase: Client) -> dict[str, list[dict]]:
         # Sort ascending by date
         prices.sort(key=lambda p: p["date"])
 
+        # Derive market debut from the first date in the fetched price series
+        if prices:
+            debut_date = prices[0]["date"]  # already sorted ascending
+            # Older date wins since yfinance lookback is always up to 5yr
+            supabase.table("assets").upsert(
+                {"ticker": ticker_upper, "market_debut_date": debut_date},
+                on_conflict="ticker",
+            ).execute()
+
         # Step 3: Upsert to Supabase
         supabase.table("asset_historical_data").upsert(
             {

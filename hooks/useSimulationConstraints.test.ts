@@ -9,8 +9,8 @@ import type { Holding } from '@/lib/types/holdings'
 // Static import — fails at build time during Red phase until hook is created
 import { useSimulationConstraints } from '@/hooks/useSimulationConstraints'
 
-// Helper: create a holding with a given asset_created_at date string
-function makeHolding(overrides: Partial<Holding> & { asset_created_at: string }): Holding {
+// Helper: create a holding with a given market_debut_date (age check) and asset_created_at (portfolio age)
+function makeHolding(overrides: Partial<Holding> & { market_debut_date: string; asset_created_at: string }): Holding {
   return {
     id: 'h1',
     asset_id: 'a1',
@@ -28,7 +28,8 @@ function makeHolding(overrides: Partial<Holding> & { asset_created_at: string })
     source: 'manual',
     stale_days: 0,
     last_updated_at: new Date().toISOString(),
-    // asset_created_at always provided via overrides
+    market_debut_date: '2020-01-01', // default — old enough for 3-month tests
+    asset_created_at: '2024-01-01',   // portfolio age — no longer used for age check
     ...overrides,
   }
 }
@@ -55,7 +56,7 @@ describe('useSimulationConstraints', () => {
   // AC1: Given 1 holding → button disabled, "at least 2 assets" tooltip
   it('is disabled when silo has 1 holding', () => {
     const holdings = [
-      makeHolding({ asset_created_at: '2020-01-01T00:00:00Z' }),
+      makeHolding({ market_debut_date: '2020-01-01T00:00:00Z', asset_created_at: '2020-01-01T00:00:00Z' }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
     expect(result.current.isDisabled).toBe(true)
@@ -65,24 +66,24 @@ describe('useSimulationConstraints', () => {
 
   // AC2: Given 2+ holdings but any holding's asset is < 3 months old → disabled, "3 months" tooltip
   it('is disabled when any holding asset is less than 3 months old', () => {
-    // AAPL created 4 months ago (old enough)
-    // TSLA created 1 month ago (too new)
+    // AAPL market debut 4 months ago (old enough)
+    // TSLA market debut 1 month ago (too new)
     const holdings = [
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2025-11-30T00:00:00Z', // ~4 months ago — old enough
+        market_debut_date: '2025-11-30T00:00:00Z', // ~4 months ago — old enough
       }),
       makeHolding({
         asset_id: 'a2',
         ticker: 'TSLA',
-        asset_created_at: '2026-03-01T00:00:00Z', // ~1 month ago — too new
+        market_debut_date: '2026-03-01T00:00:00Z', // ~1 month ago — too new
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
     expect(result.current.isDisabled).toBe(true)
     expect(result.current.disableReason).toBe(
-      'Simulation requires all assets to have at least 3 months of trading history.',
+      'Simulation requires all assets to have at least 3 months of market price history.',
     )
     expect(result.current.assetCount).toBe(2)
     expect(result.current.minAgeMet).toBe(false)
@@ -90,17 +91,17 @@ describe('useSimulationConstraints', () => {
 
   // AC2 variant: exactly 3 months old should be considered old enough
   it('is enabled when youngest asset is exactly 3 months old', () => {
-    // Created on 2025-12-31 (exactly 3 months before 2026-03-31) — boundary case
+    // market_debut on 2025-12-31 (exactly 3 months before 2026-03-31) — boundary case
     const holdings = [
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2025-12-31T00:00:00Z',
+        market_debut_date: '2025-12-31T00:00:00Z',
       }),
       makeHolding({
         asset_id: 'a2',
         ticker: 'MSFT',
-        asset_created_at: '2025-11-01T00:00:00Z',
+        market_debut_date: '2025-11-01T00:00:00Z',
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
@@ -115,12 +116,12 @@ describe('useSimulationConstraints', () => {
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2025-01-01T00:00:00Z', // Well over 3 months
+        market_debut_date: '2025-01-01T00:00:00Z', // Well over 3 months
       }),
       makeHolding({
         asset_id: 'a2',
         ticker: 'MSFT',
-        asset_created_at: '2025-06-15T00:00:00Z', // ~9 months ago
+        market_debut_date: '2025-06-15T00:00:00Z', // ~9 months ago
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
@@ -135,19 +136,19 @@ describe('useSimulationConstraints', () => {
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2026-01-15T00:00:00Z', // ~2.5 months ago — too new
+        market_debut_date: '2026-01-15T00:00:00Z', // ~2.5 months ago — too new
       }),
       makeHolding({
         asset_id: 'a2',
         ticker: 'MSFT',
-        asset_created_at: '2025-01-01T00:00:00Z',
+        market_debut_date: '2025-01-01T00:00:00Z',
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
     expect(result.current.isDisabled).toBe(true)
     // With 2 assets, the "at least 2 assets" rule is met but "3 months" is not
     expect(result.current.disableReason).toBe(
-      'Simulation requires all assets to have at least 3 months of trading history.',
+      'Simulation requires all assets to have at least 3 months of market price history.',
     )
   })
 
@@ -157,7 +158,7 @@ describe('useSimulationConstraints', () => {
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2025-11-01T00:00:00Z', // ~5 months ago — clearly valid
+        market_debut_date: '2025-11-01T00:00:00Z', // ~5 months ago — clearly valid
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))
@@ -172,12 +173,12 @@ describe('useSimulationConstraints', () => {
       makeHolding({
         asset_id: 'a1',
         ticker: 'AAPL',
-        asset_created_at: '2025-11-01T00:00:00Z', // ~5 months ago
+        market_debut_date: '2025-11-01T00:00:00Z', // ~5 months ago
       }),
       makeHolding({
         asset_id: 'a2',
         ticker: 'MSFT',
-        asset_created_at: '2025-10-01T00:00:00Z', // ~6 months ago
+        market_debut_date: '2025-10-01T00:00:00Z', // ~6 months ago
       }),
     ]
     const { result } = renderHook(() => useSimulationConstraints(holdings))

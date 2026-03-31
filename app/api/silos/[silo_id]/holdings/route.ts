@@ -34,7 +34,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   //     also include created_at for simulation button age check — STORY-042)
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type, price_source, created_at)')
+    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type, price_source, created_at, market_debut_date)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -101,7 +101,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Compute per-holding derived values
   const now = Date.now()
   const holdings = rows.map(h => {
-    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; created_at?: string }
+    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; created_at?: string; market_debut_date?: string | null }
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
     const qty = new Decimal(h.quantity as string)
     const currentValue = qty.mul(price)
@@ -132,6 +132,8 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       last_updated_at: h.last_updated_at,
       // Used by SimulateScenariosButton age check (STORY-042 / F11-R1)
       asset_created_at: asset.created_at,
+      // Market debut from yfinance 5yr series — used for 3-month simulation constraint
+      market_debut_date: asset.market_debut_date ?? null,
     }
   })
 

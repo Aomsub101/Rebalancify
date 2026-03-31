@@ -17,6 +17,11 @@ export interface Holding {
   last_updated_at: string
   /** When the asset was first mapped into any silo (used for trading-history age check) */
   asset_created_at?: string
+  /**
+   * Market debut date derived from yfinance 5-year price series.
+   * NULL if price history was never fetched — simulation will be blocked in that case.
+   */
+  market_debut_date?: string | null
 }
 
 export interface HoldingsResponse {

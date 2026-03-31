@@ -9,10 +9,11 @@ const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000
 const DISABLE_REASON_MIN_ASSETS =
   'Simulation requires at least 2 assets.'
 const DISABLE_REASON_MIN_AGE =
-  'Simulation requires all assets to have at least 3 months of trading history.'
+  'Simulation requires all assets to have at least 3 months of market price history.'
 
 export interface SimulationConstraints {
   assetCount: number
+  /** True only if every holding's market_debut_date (from yfinance 5yr series) is ≥ 3 months ago */
   minAgeMet: boolean
   isDisabled: boolean
   disableReason: string | null
@@ -22,10 +23,11 @@ export interface SimulationConstraints {
  * Computes whether the "Simulate Scenarios" button should be enabled.
  *
  * Constraint 1 (min assets):  ≥ 2 holdings required
- * Constraint 2 (min age):    every holding's asset_created_at must be ≥ 3 months ago
+ * Constraint 2 (min age):    every holding's market_debut_date must be ≥ 3 months ago
  *
- * Note: uses assets.created_at as a proxy for trading history (set when the asset
- * is first mapped into any silo — see STORY-042 notes).
+ * Note: uses market_debut_date (from yfinance 5yr price series) as proxy for
+ * market listing date — determined by the earliest date yfinance can return for
+ * the ticker, NOT when the user added the asset to their portfolio.
  */
 export function useSimulationConstraints(holdings: Holding[]): SimulationConstraints {
   return useMemo(() => {
@@ -43,10 +45,12 @@ export function useSimulationConstraints(holdings: Holding[]): SimulationConstra
     const now = Date.now()
     const threeMonthsAgo = new Date(now - THREE_MONTHS_MS)
 
-    // minAgeMet = true only if EVERY holding's asset is at least 3 months old
-    const minAgeMet = holdings.every(
-      h => h.asset_created_at && new Date(h.asset_created_at).getTime() <= threeMonthsAgo.getTime(),
-    )
+    // minAgeMet = true only if EVERY holding's market debut is at least 3 months ago
+    // market_debut_date is NULL if price history was never fetched — treat as invalid
+    const minAgeMet = holdings.every(h => {
+      if (!h.market_debut_date) return false
+      return new Date(h.market_debut_date).getTime() <= threeMonthsAgo.getTime()
+    })
 
     if (!minAgeMet) {
       return {
