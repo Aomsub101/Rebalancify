@@ -2,7 +2,7 @@
   "functions": {
     "api/optimize": {
       "runtime": "@vercel/python",
-      "maximumDuration": 300
+      "maxDuration": 300
     }
   },
   "crons": [
