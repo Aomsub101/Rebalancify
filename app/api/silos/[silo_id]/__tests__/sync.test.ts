@@ -219,12 +219,17 @@ describe('POST /api/silos/:silo_id/sync', () => {
         return { upsert: vi.fn().mockReturnValue(Promise.resolve({ error: null })) }
       }
       if (table === 'holdings') {
+        const delChain: Record<string, unknown> = {}
+        delChain.eq = vi.fn().mockReturnValue(delChain)
+        delChain.neq = vi.fn().mockReturnValue(delChain)
+        Object.assign(delChain, Promise.resolve({ error: null }))
         const upsertRes = Promise.resolve({ error: null })
         const updateRes: Record<string, unknown> = {}
         updateRes.eq = vi.fn().mockReturnValue(updateRes)
         Object.assign(updateRes, Promise.resolve({ error: null }))
         return {
           upsert: vi.fn().mockReturnValue(upsertRes),
+          delete: vi.fn().mockReturnValue(delChain),
           update: vi.fn().mockReturnValue(updateRes),
         }
       }
@@ -286,7 +291,11 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
         const upd: Record<string, unknown> = {}
         upd.eq = vi.fn().mockReturnValue(upd)
         Object.assign(upd, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+        const delChain: Record<string, unknown> = {}
+        delChain.eq = vi.fn().mockReturnValue(delChain)
+        delChain.neq = vi.fn().mockReturnValue(delChain)
+        Object.assign(delChain, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
       }
       if (table === 'price_cache_fresh') {
         // Return stale so fetchPrice tries Finnhub
@@ -410,7 +419,11 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
         const upd: Record<string, unknown> = {}
         upd.eq = vi.fn().mockReturnValue(upd)
         Object.assign(upd, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+        const delChain: Record<string, unknown> = {}
+        delChain.eq = vi.fn().mockReturnValue(delChain)
+        delChain.neq = vi.fn().mockReturnValue(delChain)
+        Object.assign(delChain, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
       }
       return {}
     }
@@ -558,7 +571,11 @@ describe('POST /api/silos/:silo_id/sync — Webull branch', () => {
         const upd: Record<string, unknown> = {}
         upd.eq = vi.fn().mockReturnValue(upd)
         Object.assign(upd, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), update: vi.fn().mockReturnValue(upd) }
+        const delChain: Record<string, unknown> = {}
+        delChain.eq = vi.fn().mockReturnValue(delChain)
+        delChain.neq = vi.fn().mockReturnValue(delChain)
+        Object.assign(delChain, Promise.resolve({ error: null }))
+        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
       }
       return {}
     }
