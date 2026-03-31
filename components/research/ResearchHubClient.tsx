@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { LLMKeyGate } from '@/components/research/LLMKeyGate'
+import { ResearchHeader } from '@/components/research/ResearchHeader'
 import { SentimentCard } from '@/components/research/SentimentCard'
 import { RiskFactorsCard } from '@/components/research/RiskFactorsCard'
 import { NarrativeSummaryCard } from '@/components/research/NarrativeSummaryCard'
@@ -32,19 +33,6 @@ interface Props {
   ticker: string
   companyName: string
   llmConnected: boolean
-}
-
-function formatTimestamp(iso: string | undefined) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 export function ResearchHubClient({ ticker, companyName, llmConnected }: Props) {
@@ -95,23 +83,13 @@ export function ResearchHubClient({ ticker, companyName, llmConnected }: Props) 
         <LLMKeyGate />
       ) : (
         <>
-          <header className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold text-foreground">
-                {ticker}{' '}
-                <span className="text-sm font-normal text-muted-foreground">
-                  {companyName}
-                </span>
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Last refreshed{' '}
-                <time dateTime={researchQuery.data?.created_at ?? ''}>
-                  {formatTimestamp(researchQuery.data?.created_at)}
-                </time>
-                {researchQuery.data?.cached ? ' (cached)' : ''}
-              </p>
-            </div>
-
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <ResearchHeader
+              ticker={ticker}
+              companyName={companyName}
+              createdAt={researchQuery.data?.created_at}
+              cached={researchQuery.data?.cached}
+            />
             <button
               type="button"
               onClick={() => refreshMutation.mutate()}
@@ -128,7 +106,7 @@ export function ResearchHubClient({ ticker, companyName, llmConnected }: Props) 
               />
               {refreshMutation.isPending ? 'Refreshing…' : 'Refresh'}
             </button>
-          </header>
+          </div>
 
           {researchQuery.isError && (
             <ErrorBanner

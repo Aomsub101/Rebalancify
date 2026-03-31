@@ -19,7 +19,7 @@ export function NarrativeSummaryCard({ summary, sources }: Props) {
 
   const { previewText, isTruncated } = useMemo(() => {
     const words = splitWords(summary ?? '')
-    const limit = 200
+    const limit = 300
     if (words.length <= limit) {
       return { previewText: words.join(' '), isTruncated: false }
     }

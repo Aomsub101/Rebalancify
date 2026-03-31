@@ -9,8 +9,8 @@ function wrap(ui: React.ReactElement) {
 }
 
 function makeLongSummary() {
-  const words = Array.from({ length: 230 }).map((_, i) => `word${i}`)
-  words[229] = 'finalWord'
+  const words = Array.from({ length: 350 }).map((_, i) => `word${i}`)
+  words[349] = 'finalWord'
   return words.join(' ')
 }
 
