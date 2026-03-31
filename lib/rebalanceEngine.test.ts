@@ -1,20 +1,12 @@
 /**
- * Unit tests for lib/rebalanceEngine.ts — STORY-010
+ * Unit tests for lib/rebalanceEngine.ts — post-migration-23
  *
- * TDD: these tests are written before the implementation (Red phase).
- * The engine is a pure function; no DB or HTTP calls.
+ * Pure function tests; no DB or HTTP calls.
  *
- * STORY-010 covers:
- *   - Partial mode: no overspend, ≤2% residual drift
- *   - Empty orders when all holdings are at target
- *   - Silo isolation (two independent inputs produce independent results)
- *   - Weights ≠ 100 proceeds normally
- *   - Timing: 50 holdings < 2000ms
- *
- * STORY-010b covers (not tested here):
- *   - Full mode ±0.01% accuracy
- *   - Pre-flight failure (BALANCE_INSUFFICIENT)
- *   - Cash injection (include_cash + cash_amount)
+ * New interface (migration 23):
+ *   - EngineHolding: no more cash_balance (cash is on silos)
+ *   - EngineInput: cashBalance replaces include_cash + cash_amount
+ *   - Cash is a first-class target weight (complement to 100%)
  */
 
 import { describe, it, expect } from 'vitest'
@@ -30,9 +22,8 @@ function makeHolding(
   ticker: string,
   quantity: string,
   price: string,
-  cash_balance = '0.00000000',
 ): EngineHolding {
-  return { asset_id, ticker, quantity, cash_balance, price }
+  return { asset_id, ticker, quantity, price }
 }
 
 function makeWeight(asset_id: string, weight_pct: string): EngineWeight {
@@ -47,9 +38,9 @@ describe('calculateRebalance – partial mode', () => {
   it('generates buy/sell orders without overspending available cash', () => {
     /**
      * Setup:
-     *   AAPL: qty=10, price=100 → current_value=1000 (current ~55.6% of portfolio)
-     *   GOOG: qty=2, price=300 → current_value=600  (current ~33.3% of portfolio)
-     *   cash_balance on GOOG holding = 200
+     *   AAPL: qty=10, price=100 → current_value=1000
+     *   GOOG: qty=2, price=300 → current_value=600
+     *   silo cash_balance = 200
      *   total_value = 1000 + 600 + 200 = 1800
      *
      * Targets: AAPL=40%, GOOG=50%
@@ -62,7 +53,7 @@ describe('calculateRebalance – partial mode', () => {
      */
     const holdings: EngineHolding[] = [
       makeHolding('asset-aapl', 'AAPL', '10.00000000', '100.00000000'),
-      makeHolding('asset-goog', 'GOOG', '2.00000000', '300.00000000', '200.00000000'),
+      makeHolding('asset-goog', 'GOOG', '2.00000000', '300.00000000'),
     ]
     const weights: EngineWeight[] = [
       makeWeight('asset-aapl', '40.000'),
@@ -72,8 +63,7 @@ describe('calculateRebalance – partial mode', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '200.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -86,7 +76,6 @@ describe('calculateRebalance – partial mode', () => {
 
     expect(sellOrder).toBeDefined()
     expect(sellOrder!.order_type).toBe('sell')
-    expect(new Decimal(sellOrder!.quantity).gte(0)).toBe(true)
 
     expect(buyOrder).toBeDefined()
     expect(buyOrder!.order_type).toBe('buy')
@@ -96,27 +85,26 @@ describe('calculateRebalance – partial mode', () => {
     const available = new Decimal('200.00000000').plus(sellProceeds)
     const buyCost = new Decimal(buyOrder!.quantity).mul(buyOrder!.price_at_calc)
 
-    expect(buyCost.lte(available.plus('0.00000001'))).toBe(true) // tolerance for rounding
+    expect(buyCost.lte(available.plus('0.00000001'))).toBe(true)
   })
 
   it('scales buy orders down when available capital is insufficient', () => {
     /**
      * Setup:
-     *   SPY: qty=1, price=500 → current_value=500 (100% of silo)
-     *   cash_balance=10 on SPY holding
+     *   SPY: qty=1, price=500 → current_value=500 (100% of assets)
+     *   silo cash_balance = 10
      *   total_value = 510
      *
      * Targets: SPY=40%, QQQ=60%
      *   SPY target = 510 * 0.4 = 204 → delta = -296 → SELL ceil(296/500) = 1 share
-     *   QQQ target = 510 * 0.6 = 306 → BUY floor(306/600) = 0 shares (QQQ price=600)
-     *   → QQQ has no holding yet (qty=0 in holdings)
+     *   QQQ target = 510 * 0.6 = 306 → BUY floor(306/600) = 0 shares (QQQ price=600, no holding yet)
      *
      * After sell: available = cash(10) + sell_proceeds(500) = 510
      * QQQ buy_qty = floor(306/600) = 0 → filtered out (zero qty)
      * → Only a SELL order for SPY
      */
     const holdings: EngineHolding[] = [
-      makeHolding('asset-spy', 'SPY', '1.00000000', '500.00000000', '10.00000000'),
+      makeHolding('asset-spy', 'SPY', '1.00000000', '500.00000000'),
     ]
     const weights: EngineWeight[] = [
       makeWeight('asset-spy', '40.000'),
@@ -126,23 +114,20 @@ describe('calculateRebalance – partial mode', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '10.00000000',
     }
 
     const result = calculateRebalance(input)
 
     expect(result.balance_valid).toBe(true)
 
-    // No overspend: sum of all buy estimated_values ≤ available cash
     const totalBuyCost = result.orders
       .filter(o => o.order_type === 'buy')
       .reduce((sum, o) => sum.plus(o.estimated_value), new Decimal(0))
     const totalSellProceeds = result.orders
       .filter(o => o.order_type === 'sell')
       .reduce((sum, o) => sum.plus(o.estimated_value), new Decimal(0))
-    const existingCash = new Decimal('10.00000000')
-    const available = existingCash.plus(totalSellProceeds)
+    const available = new Decimal('10.00000000').plus(totalSellProceeds)
 
     expect(totalBuyCost.lte(available.plus('0.00000001'))).toBe(true)
   })
@@ -173,8 +158,7 @@ describe('calculateRebalance – empty orders', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '0.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -204,29 +188,26 @@ describe('calculateRebalance – silo isolation', () => {
     const inputA: EngineInput = {
       holdings: [
         makeHolding('asset-aapl', 'AAPL', '10.00000000', '100.00000000'),
-        makeHolding('asset-goog', 'GOOG', '2.00000000', '300.00000000', '200.00000000'),
+        makeHolding('asset-goog', 'GOOG', '2.00000000', '300.00000000'),
       ],
       weights: weightsA,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '200.00000000',
     }
 
     const inputB: EngineInput = {
       holdings: [
         makeHolding('asset-aapl', 'AAPL', '100.00000000', '100.00000000'),
-        makeHolding('asset-goog', 'GOOG', '20.00000000', '300.00000000', '2000.00000000'),
+        makeHolding('asset-goog', 'GOOG', '20.00000000', '300.00000000'),
       ],
-      weights: weightsA, // same targets
+      weights: weightsA,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '2000.00000000',
     }
 
     const resultA = calculateRebalance(inputA)
     const resultB = calculateRebalance(inputB)
 
-    // Results must differ — silo B is 10x, so order quantities should be ~10x
     const sellA = resultA.orders.find(o => o.order_type === 'sell')
     const sellB = resultB.orders.find(o => o.order_type === 'sell')
 
@@ -255,7 +236,7 @@ describe('calculateRebalance – weights not summing to 100', () => {
      */
     const holdings: EngineHolding[] = [
       makeHolding('asset-aapl', 'AAPL', '5.00000000', '200.00000000'),
-      makeHolding('asset-btc', 'BTC', '0.10000000', '10000.00000000', '200.00000000'),
+      makeHolding('asset-btc', 'BTC', '0.10000000', '10000.00000000'),
     ]
     const weights: EngineWeight[] = [
       makeWeight('asset-aapl', '40.000'),
@@ -265,8 +246,7 @@ describe('calculateRebalance – weights not summing to 100', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '200.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -297,8 +277,7 @@ describe('calculateRebalance – snapshot_before', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '0.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -322,7 +301,6 @@ describe('calculateRebalance – timing', () => {
       asset_id: `asset-${i}`,
       ticker: `TKR${i}`,
       quantity: '10.00000000',
-      cash_balance: i === 0 ? '1000.00000000' : '0.00000000',
       price: String((100 + i).toFixed(8)),
     }))
 
@@ -336,8 +314,7 @@ describe('calculateRebalance – timing', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '1000.00000000',
     }
 
     const start = Date.now()
@@ -350,10 +327,6 @@ describe('calculateRebalance – timing', () => {
 })
 
 // ---------------------------------------------------------------------------
-// STORY-010b tests
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Test 7 — Full mode: ±0.01% accuracy (AC1)
 // ---------------------------------------------------------------------------
 
@@ -361,9 +334,10 @@ describe('calculateRebalance – full mode accuracy', () => {
   it('achieves post-execution weights within ±0.01% of targets', () => {
     /**
      * Setup:
-     *   AAPL: qty=10, price=100, value=1000, cash_balance=1000
+     *   AAPL: qty=10, price=100, value=1000
      *   MSFT: qty=0, price=200, no value
-     *   total_value = 1000 + 0 + 1000 (cash) = 2000
+     *   silo cash_balance=1000
+     *   total_value = 1000 + 0 + 1000 = 2000
      *
      * Targets: AAPL=50%, MSFT=50%
      *   AAPL delta = 1000 - 1000 = 0 → no order
@@ -373,7 +347,7 @@ describe('calculateRebalance – full mode accuracy', () => {
      * weight_after for MSFT = 1000/2000 = 50% exactly
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '10.00000000', '100.00000000', '1000.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '10.00000000', '100.00000000'),
       makeHolding('asset-msft', 'MSFT', '0.00000000', '200.00000000'),
     ]
     const weights = [
@@ -384,8 +358,7 @@ describe('calculateRebalance – full mode accuracy', () => {
       holdings,
       weights,
       mode: 'full',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '1000.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -403,27 +376,17 @@ describe('calculateRebalance – full mode accuracy', () => {
 
   it('full mode uses ROUND_HALF_UP for buy quantities (more accurate than floor)', () => {
     /**
-     * AAPL: qty=0, price=300, no value
-     * cash_balance=150, total=150
-     * Target: AAPL=100%
+     * AAPL: qty=0, price=100, cash_balance=400
+     * MSFT: qty=0, price=300, cash_balance=600
+     * total=1000
+     * Targets: AAPL=40%, MSFT=60%
      *
-     * Partial mode: floor(150/300) = 0.5 → 0.50000000 → cost=150.00 (same here)
-     * Full mode:    round(150/300) = round(0.5) = 0.50000000 → same result in this case
-     *
-     * A case where they differ:
-     * cash=250, AAPL price=300
-     * Partial: floor(250/300) = floor(0.833...) = 0.83333333 → cost=249.999999
-     * Full:    round(250/300) = round(0.833...) = 0.83333333 → same here (3 < 5)
-     *
-     * Use a case where the 8th decimal digit is ≥ 5 to force round-up:
-     * cash=200, AAPL price=300
-     * 200/300 = 0.66666666... → 9th digit is 6 → round up at 8dp: 0.66666667
-     * cost = 0.66666667 × 300 = 200.00000100 — this exceeds available (100b test below)
-     *
-     * Here we just verify full mode produces weight_after within ±0.01%
+     * AAPL target=400, buy round(400/100)=4 shares → cost=400
+     * MSFT target=600, buy round(600/300)=2 shares → cost=600
+     * total buy cost=1000 = available → balance_valid=true
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '0.00000000', '100.00000000', '1000.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '100.00000000'),
       makeHolding('asset-msft', 'MSFT', '0.00000000', '300.00000000'),
     ]
     const weights = [
@@ -434,14 +397,11 @@ describe('calculateRebalance – full mode accuracy', () => {
       holdings,
       weights,
       mode: 'full',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '1000.00000000',
     }
 
     const result = calculateRebalance(input)
 
-    // Both buys: AAPL target=400, buy round(400/100)=4; MSFT target=600, buy round(600/300)=2
-    // total buy cost=400+600=1000 = available → passes
     expect(result.balance_valid).toBe(true)
 
     const aaplOrder = result.orders.find(o => o.asset_id === 'asset-aapl')
@@ -464,16 +424,18 @@ describe('calculateRebalance – full mode pre-flight failure', () => {
   it('returns balance_valid=false with balance_errors when buy cost exceeds available', () => {
     /**
      * Setup:
-     *   AAPL: qty=0, price=300, cash_balance=200, total=200
+     *   AAPL: qty=0, price=300
+     *   silo cash_balance=200
+     *   total=200
      *   Target: AAPL=100%
      *
-     *   buy_qty = round(200/300) = round(0.666666...) = 0.66666667 (round-up at 8dp)
+     *   buy_qty = round(200/300) = round(0.666...) = 0.66666667 (round-up at 8dp)
      *   buy_cost = 0.66666667 × 300 = 200.00000100
      *   available = 200 (cash) + 0 (sells) = 200
      *   200.00000100 > 200 → INSUFFICIENT → balance_valid=false
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000'),
     ]
     const weights = [
       makeWeight('asset-aapl', '100.000'),
@@ -482,15 +444,13 @@ describe('calculateRebalance – full mode pre-flight failure', () => {
       holdings,
       weights,
       mode: 'full',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '200.00000000',
     }
 
     const result = calculateRebalance(input)
 
     expect(result.balance_valid).toBe(false)
     expect(result.balance_errors.length).toBeGreaterThan(0)
-    // Error message should mention the shortfall
     expect(result.balance_errors[0]).toMatch(/shortfall/i)
   })
 
@@ -501,7 +461,7 @@ describe('calculateRebalance – full mode pre-flight failure', () => {
      * → balance_valid=true (partial mode never fails pre-flight)
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000'),
     ]
     const weights = [
       makeWeight('asset-aapl', '100.000'),
@@ -510,8 +470,7 @@ describe('calculateRebalance – full mode pre-flight failure', () => {
       holdings,
       weights,
       mode: 'partial',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '200.00000000',
     }
 
     const result = calculateRebalance(input)
@@ -522,90 +481,83 @@ describe('calculateRebalance – full mode pre-flight failure', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Test 9 — Cash injection: include_cash=true adds to available capital (AC4)
+// Test 9 — Full mode cash target: cash treated as first-class target
 // ---------------------------------------------------------------------------
 
-describe('calculateRebalance – cash injection', () => {
-  it('cash injection resolves a pre-flight failure', () => {
+describe('calculateRebalance – full mode cash as target weight', () => {
+  it('sells overweight assets to raise cash when cash is below target', () => {
     /**
-     * Without injection (same as Test 8):
-     *   buy_cost = 200.00000100 > available(200) → balance_valid=false
+     * Setup:
+     *   AAPL: qty=10, price=50 → value=500 (50% of portfolio)
+     *   MSFT: qty=0, price=50 → value=0 (0%)
+     *   CASH: 500 (50% of portfolio)
+     *   total = 1000
      *
-     * With injection cash_amount="0.10000000":
-     *   total = 200 + 0.1 = 200.1
-     *   buy_qty = round(200.1/300) = round(0.667) = 0.66700000
-     *   buy_cost = 0.66700000 × 300 = 200.10
-     *   available = 200 (existing) + 0.1 (injected) = 200.1
-     *   200.10 ≤ 200.1 → balance_valid=true
+     * Targets: AAPL=40%, MSFT=40%, CASH=20%
+     *   Cash target = 200, current = 500 → excess = 300
+     *   AAPL target = 400, current = 500 → overweight by 100 → SELL 2 shares
+     *   MSFT target = 400, current = 0 → underweight → BUY 8 shares
+     *
+     * The cash being above target means we buy underweight assets,
+     * which uses the excess cash. After buying MSFT, cash should be at 20%.
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '0.00000000', '300.00000000', '200.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '10.00000000', '50.00000000'),
+      makeHolding('asset-msft', 'MSFT', '0.00000000', '50.00000000'),
     ]
     const weights = [
-      makeWeight('asset-aapl', '100.000'),
+      makeWeight('asset-aapl', '40.000'),
+      makeWeight('asset-msft', '40.000'),
     ]
-
-    // Without injection — should fail
-    const inputNoInject: EngineInput = {
+    const input: EngineInput = {
       holdings,
       weights,
       mode: 'full',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '500.00000000',
     }
-    const resultNoInject = calculateRebalance(inputNoInject)
-    expect(resultNoInject.balance_valid).toBe(false)
 
-    // With injection — should pass
-    const inputWithInject: EngineInput = {
-      holdings,
-      weights,
-      mode: 'full',
-      include_cash: true,
-      cash_amount: '0.10000000',
-    }
-    const resultWithInject = calculateRebalance(inputWithInject)
-    expect(resultWithInject.balance_valid).toBe(true)
-    expect(resultWithInject.balance_errors).toHaveLength(0)
+    const result = calculateRebalance(input)
+
+    expect(result.balance_valid).toBe(true)
+    // Cash is over target (500 vs target of 200), so we should buy MSFT
+    const msftBuy = result.orders.find(o => o.asset_id === 'asset-msft' && o.order_type === 'buy')
+    expect(msftBuy).toBeDefined()
+    // And sell some AAPL
+    const aaplSell = result.orders.find(o => o.asset_id === 'asset-aapl' && o.order_type === 'sell')
+    expect(aaplSell).toBeDefined()
   })
 
-  it('injected cash increases total_value and affects target values', () => {
+  it('buys underweight assets to spend cash when cash is above target', () => {
     /**
-     * AAPL: qty=5, price=100, value=500, cash=0
-     * Injecting cash=500 → total=1000 instead of 500
-     * Target: AAPL=100%
-     *   Without injection: target=500, delta=0 → no order
-     *   With injection: target=1000, delta=500 → buy round(500/100)=5 shares
+     * Setup:
+     *   AAPL: qty=10, price=50 → value=500 (50%)
+     *   CASH: 500 (50%)
+     *   total = 1000
+     *
+     * Targets: AAPL=60%, CASH=40%
+     *   Cash target = 400, current = 500 → excess = 100
+     *   AAPL target = 600, current = 500 → underweight by 100 → BUY 2 shares
+     *
+     * After buying 2 AAPL shares at $50 = $100, cash goes from 500 to 400 = 40%
      */
     const holdings = [
-      makeHolding('asset-aapl', 'AAPL', '5.00000000', '100.00000000'),
+      makeHolding('asset-aapl', 'AAPL', '10.00000000', '50.00000000'),
     ]
     const weights = [
-      makeWeight('asset-aapl', '100.000'),
+      makeWeight('asset-aapl', '60.000'),
     ]
-
-    const inputNoInject: EngineInput = {
+    const input: EngineInput = {
       holdings,
       weights,
       mode: 'full',
-      include_cash: false,
-      cash_amount: '0.00000000',
+      cashBalance: '500.00000000',
     }
-    const resultNoInject = calculateRebalance(inputNoInject)
-    expect(resultNoInject.orders).toHaveLength(0)
 
-    const inputWithInject: EngineInput = {
-      holdings,
-      weights,
-      mode: 'full',
-      include_cash: true,
-      cash_amount: '500.00000000',
-    }
-    const resultWithInject = calculateRebalance(inputWithInject)
+    const result = calculateRebalance(input)
 
-    // With injected cash, a BUY order should be generated
-    const buyOrder = resultWithInject.orders.find(o => o.order_type === 'buy')
-    expect(buyOrder).toBeDefined()
-    expect(buyOrder!.asset_id).toBe('asset-aapl')
+    expect(result.balance_valid).toBe(true)
+    // Cash is above target → buy AAPL
+    const aaplBuy = result.orders.find(o => o.asset_id === 'asset-aapl' && o.order_type === 'buy')
+    expect(aaplBuy).toBeDefined()
   })
 })

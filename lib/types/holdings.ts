@@ -5,7 +5,6 @@ export interface Holding {
   name: string
   asset_type: string
   quantity: string
-  cost_basis: string | null
   current_price: string
   current_value: string
   current_weight_pct: number
@@ -15,7 +14,6 @@ export interface Holding {
   drift_breached: boolean
   source: string
   stale_days: number
-  age_days: number
   last_updated_at: string
 }
 

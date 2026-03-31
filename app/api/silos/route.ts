@@ -62,11 +62,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: { code: 'INVALID_JSON', message: 'Invalid request body' } }, { status: 400 })
   }
 
-  const { name, platform_type, base_currency, drift_threshold } = body as {
+  const { name, platform_type, base_currency, drift_threshold, cash_balance } = body as {
     name?: unknown
     platform_type?: unknown
     base_currency?: unknown
     drift_threshold?: unknown
+    cash_balance?: unknown
   }
 
   if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
     : 'USD'
 
   const threshold = typeof drift_threshold === 'number' ? drift_threshold : 5.0
+  const cashBalance = typeof cash_balance === 'string' ? cash_balance : '0.00000000'
 
   const { data: newSilo, error: insertError } = await supabase
     .from('silos')
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
       platform_type,
       base_currency: currency,
       drift_threshold: threshold,
+      cash_balance: cashBalance,
     })
     .select('*')
     .single()

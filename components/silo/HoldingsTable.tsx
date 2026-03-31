@@ -4,7 +4,7 @@ import { HoldingRow } from '@/components/silo/HoldingRow'
 import { CashBalanceRow } from '@/components/silo/CashBalanceRow'
 import type { Holding } from '@/lib/types/holdings'
 
-type SortField = 'ticker' | 'quantity' | 'current_value' | 'current_weight_pct' | 'target_weight_pct' | 'drift_pct' | 'age_days'
+type SortField = 'ticker' | 'quantity' | 'current_value' | 'current_weight_pct' | 'target_weight_pct' | 'drift_pct'
 type SortDirection = 'asc' | 'desc'
 
 interface SortHeaderProps {
@@ -110,10 +110,6 @@ export function HoldingsTable({
           aVal = a.drift_pct
           bVal = b.drift_pct
           break
-        case 'age_days':
-          aVal = a.age_days
-          bVal = b.age_days
-          break
         default:
           return 0
       }
@@ -136,7 +132,6 @@ export function HoldingsTable({
             <SortHeader label="Weight" field="current_weight_pct" currentField={sortField} direction={sortDirection} align="right" onSort={handleSort} />
             <SortHeader label="Target" field="target_weight_pct" currentField={sortField} direction={sortDirection} align="right" onSort={handleSort} />
             <SortHeader label="Drift" field="drift_pct" currentField={sortField} direction={sortDirection} align="right" onSort={handleSort} />
-            <SortHeader label="Age" field="age_days" currentField={sortField} direction={sortDirection} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>

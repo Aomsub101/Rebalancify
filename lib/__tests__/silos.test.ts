@@ -26,6 +26,7 @@ const baseSiloRow: SiloRow = {
   last_synced_at: null,
   created_at: '2026-03-01T00:00:00Z',
   updated_at: '2026-03-01T00:00:00Z',
+  cash_balance: '0.00000000',
 }
 
 describe('checkSiloLimit', () => {

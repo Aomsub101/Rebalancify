@@ -223,7 +223,7 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
         { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
       )
 
-    // Upsert holding: quantity + source
+    // Upsert holding: quantity + source (cost_basis/cash_balance removed — post-migration 23)
     const { error: holdingErr } = await supabase
       .from('holdings')
       .upsert(
@@ -231,8 +231,6 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
           silo_id,
           asset_id: assetId,
           quantity: pos.qty,
-          cost_basis: pos.cost_basis ?? null,
-          cash_balance: '0',
           source: 'alpaca_sync',
           last_updated_at: syncedAt,
         },
@@ -249,30 +247,11 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
     }
   }
 
-  // 5. Store account cash: reset all holdings' cash_balance to 0,
-  //    then set it on the first holding (or do nothing if no holdings exist).
-  //    This preserves the SUM(cash_balance) aggregation used by GET /holdings.
+  // 5. Store account cash on silos.cash_balance (post-migration 23)
   await supabase
-    .from('holdings')
-    .update({ cash_balance: '0' })
-    .eq('silo_id', silo_id)
-
-  if (positions.length > 0) {
-    // Pick any one holding to carry the full cash balance
-    const { data: firstAsset } = await supabase
-      .from('assets')
-      .select('id')
-      .eq('ticker', positions[0].symbol)
-      .maybeSingle()
-
-    if (firstAsset) {
-      await supabase
-        .from('holdings')
-        .update({ cash_balance: account.cash })
-        .eq('silo_id', silo_id)
-        .eq('asset_id', firstAsset.id)
-    }
-  }
+    .from('silos')
+    .update({ cash_balance: account.cash })
+    .eq('id', silo_id)
 
   // 6. Update silo.last_synced_at
   await supabase
@@ -440,7 +419,7 @@ async function syncBitkub(
         { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
       )
 
-    // Upsert holding
+    // Upsert holding (cash_balance removed — post-migration 23)
     const { error: holdingErr } = await supabase
       .from('holdings')
       .upsert(
@@ -448,7 +427,6 @@ async function syncBitkub(
           silo_id: siloId,
           asset_id: assetId,
           quantity: h.quantity,
-          cash_balance: '0',
           source: 'bitkub_sync',
           last_updated_at: syncedAt,
         },
@@ -475,28 +453,11 @@ async function syncBitkub(
     }
   }
 
-  // 5. Store THB cash balance: reset all to 0, then set on first holding
+  // 5. Store THB cash balance on silos.cash_balance (post-migration 23)
   await supabase
-    .from('holdings')
-    .update({ cash_balance: '0' })
-    .eq('silo_id', siloId)
-
-  if (holdings.length > 0) {
-    const { data: firstAsset } = await supabase
-      .from('assets')
-      .select('id')
-      .eq('ticker', holdings[0].symbol)
-      .eq('price_source', 'bitkub')
-      .maybeSingle()
-
-    if (firstAsset) {
-      await supabase
-        .from('holdings')
-        .update({ cash_balance: thbBalance })
-        .eq('silo_id', siloId)
-        .eq('asset_id', firstAsset.id)
-    }
-  }
+    .from('silos')
+    .update({ cash_balance: thbBalance })
+    .eq('id', siloId)
 
   // 6. AC4: update silo.last_synced_at
   await supabase
@@ -665,7 +626,7 @@ async function syncInnovestx(
       const { error: holdingErr } = await supabase
         .from('holdings')
         .upsert(
-          { silo_id: siloId, asset_id: assetId, quantity: pos.quantity, cash_balance: '0', source: 'innovestx_sync', last_updated_at: syncedAt },
+          { silo_id: siloId, asset_id: assetId, quantity: pos.quantity, source: 'innovestx_sync', last_updated_at: syncedAt },
           { onConflict: 'silo_id,asset_id' },
         )
       if (!holdingErr) totalHoldingsUpdated++
@@ -769,7 +730,7 @@ async function syncInnovestx(
       const { error: holdingErr } = await supabase
         .from('holdings')
         .upsert(
-          { silo_id: siloId, asset_id: assetId, quantity: h.quantity, cash_balance: '0', source: 'innovestx_sync', last_updated_at: syncedAt },
+          { silo_id: siloId, asset_id: assetId, quantity: h.quantity, source: 'innovestx_sync', last_updated_at: syncedAt },
           { onConflict: 'silo_id,asset_id' },
         )
       if (!holdingErr) totalHoldingsUpdated++
@@ -927,7 +888,7 @@ async function syncSchwab(
         { onConflict: 'silo_id,asset_id', ignoreDuplicates: true },
       )
 
-    // Upsert holding — AC2: source = 'schwab_sync'
+    // Upsert holding — cost_basis/cash_balance removed (post-migration 23)
     const { error: holdingErr } = await supabase
       .from('holdings')
       .upsert(
@@ -935,8 +896,6 @@ async function syncSchwab(
           silo_id: siloId,
           asset_id: assetId,
           quantity: pos.quantity,
-          cost_basis: pos.costBasis ?? null,
-          cash_balance: '0',
           source: 'schwab_sync',
           last_updated_at: syncedAt,
         },
@@ -1083,8 +1042,6 @@ async function syncWebull(
           silo_id: siloId,
           asset_id: assetId,
           quantity: pos.quantity,
-          cost_basis: pos.costBasis ?? null,
-          cash_balance: '0',
           source: 'webull_sync',
           last_updated_at: syncedAt,
         },

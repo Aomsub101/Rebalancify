@@ -43,6 +43,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   if ('drift_threshold' in body && typeof body.drift_threshold === 'number') {
     updates.drift_threshold = body.drift_threshold
   }
+  if ('cash_balance' in body && typeof body.cash_balance === 'string') {
+    updates.cash_balance = body.cash_balance
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: { code: 'NO_FIELDS', message: 'No updatable fields provided' } }, { status: 400 })

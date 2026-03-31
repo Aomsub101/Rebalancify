@@ -28,6 +28,7 @@ export interface SiloRow {
   last_synced_at: string | null
   created_at: string
   updated_at: string
+  cash_balance: string
 }
 
 export interface SiloResponse {
@@ -43,6 +44,7 @@ export interface SiloResponse {
   cash_target_pct: number
   active_silo_count: number
   silo_limit: number
+  cash_balance: string
   alpaca_mode?: string
 }
 
@@ -89,6 +91,7 @@ export function buildSiloResponse(
     cash_target_pct: 100,
     active_silo_count: activeSiloCount,
     silo_limit: siloLimit,
+    cash_balance: row.cash_balance ?? '0.00000000',
   }
   if (row.platform_type === 'alpaca' && alpacaMode !== undefined) {
     response.alpaca_mode = alpacaMode

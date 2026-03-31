@@ -25,8 +25,6 @@ interface Props {
 
 export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }: Props) {
   const [mode, setMode] = useState<'partial' | 'full'>('partial')
-  const [includeCash, setIncludeCash] = useState(false)
-  const [cashAmount, setCashAmount] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { isOnline } = useOnlineStatus()
@@ -44,8 +42,6 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode,
-          include_cash: includeCash,
-          cash_amount: includeCash && cashAmount ? cashAmount : '0.00000000',
         }),
       })
       const data = await res.json()
@@ -140,38 +136,6 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
           </div>
         </div>
       )}
-
-      {/* Cash toggle + amount input */}
-      <div className="space-y-3">
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={includeCash}
-            onChange={(e) => setIncludeCash(e.target.checked)}
-            className="h-4 w-4 rounded border-border text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <span className="text-sm text-foreground">Include additional cash in rebalancing</span>
-        </label>
-
-        {includeCash && (
-          <div className="pl-7">
-            <label htmlFor="cash-amount" className="block text-xs text-muted-foreground mb-1">
-              Cash to deploy
-            </label>
-            <input
-              id="cash-amount"
-              type="number"
-              min="0"
-              step="0.01"
-              value={cashAmount}
-              onChange={(e) => setCashAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-48 px-3 py-2 text-sm rounded-md border border-border bg-card text-foreground placeholder:text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring font-mono"
-              aria-label="Cash amount to deploy"
-            />
-          </div>
-        )}
-      </div>
 
       {/* Weights sum warning (AC2) */}
       {weightsSumNotEqual && (

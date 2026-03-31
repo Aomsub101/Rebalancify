@@ -17,10 +17,10 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
 
   const { silo_id } = await params
 
-  // 1. Verify silo ownership
+  // 1. Verify silo ownership + fetch cash_balance
   const { data: silo } = await supabase
     .from('silos')
-    .select('id, drift_threshold, platform_type')
+    .select('id, drift_threshold, platform_type, cash_balance')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 2. Fetch holdings with assets joined
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, cost_basis, cash_balance, source, last_updated_at, acquired_at, assets(ticker, name, asset_type, price_source)')
+    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -59,33 +59,9 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
 
-  // Fetch prices for uncached assets on-demand (Bug fix: uncached assets defaulted to 0)
-  const assetInfoMap = new Map(rows.map(h => {
-    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; price_source: string }
-    return [h.asset_id, asset]
-  }))
-
-  const uncachedAssetIds = assetIds.filter(id => !priceMap.has(id))
-  await Promise.all(uncachedAssetIds.map(async (assetId) => {
-    const asset = assetInfoMap.get(assetId)
-    if (!asset) return
-    // Resolve price_source: alpaca → finnhub, bitkub → coingecko
-    const resolvedSource = asset.price_source === 'alpaca' ? 'finnhub'
-      : asset.price_source === 'bitkub' ? 'coingecko'
-      : asset.price_source
-    try {
-      const result = await fetchPrice(supabase, assetId, asset.ticker, resolvedSource as 'finnhub' | 'coingecko')
-      priceMap.set(assetId, result.price)
-    } catch {
-      // non-fatal: leave priceMap entry missing; holdings calculation will use '0'
-    }
-  }))
-
   // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
-  const cashBalance = rows.reduce((sum, h) =>
-    sum.plus(new Decimal(h.cash_balance as string ?? '0')),
-    new Decimal(0)
-  )
+  // cash_balance now comes from the silos table (post-migration 23), not per-holding sums
+  const cashBalance = new Decimal(silo.cash_balance as string ?? '0')
   const holdingsValue = rows.reduce((sum, h) => {
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
     return sum.plus(new Decimal(h.quantity as string).mul(price))
@@ -106,11 +82,6 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     const driftPct = currentWeightPct.minus(targetWeightPct)
     const driftPctNum = parseFloat(driftPct.toFixed(3))
     const staleDays = Math.floor((now - new Date(h.last_updated_at as string).getTime()) / 86_400_000)
-    // Age: days since the asset was first acquired (or re-acquired after a sell-out)
-    // acquired_at may be NULL for holdings with quantity = 0 (never acquired)
-    const acquiredAt = (h as unknown as { acquired_at?: string | null }).acquired_at
-    const ageMs = acquiredAt ? now - new Date(acquiredAt).getTime() : 0
-    const ageDays = ageMs > 0 ? Math.floor(ageMs / 86_400_000) : 0
 
     return {
       id: h.id,
@@ -119,7 +90,6 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       name: asset.name,
       asset_type: asset.asset_type,
       quantity: h.quantity,
-      cost_basis: h.cost_basis,
       current_price: priceMap.get(h.asset_id) ?? '0.00000000',
       current_value: currentValue.toFixed(8),
       current_weight_pct: parseFloat(currentWeightPct.toFixed(3)),
@@ -129,7 +99,6 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       drift_breached: driftPct.abs().gt(new Decimal(silo.drift_threshold)),
       source: h.source,
       stale_days: staleDays,
-      age_days: ageDays,
       last_updated_at: h.last_updated_at,
     }
   })
@@ -162,14 +131,14 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Silo not found' } }, { status: 404 })
   }
 
-  let body: { asset_id?: string; quantity?: string; cost_basis?: string; cash_balance?: string; [key: string]: unknown }
+  let body: { asset_id?: string; quantity?: string; [key: string]: unknown }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: { code: 'INVALID_JSON', message: 'Invalid JSON' } }, { status: 400 })
   }
 
-  const { asset_id, quantity, cost_basis, cash_balance } = body
+  const { asset_id, quantity } = body
   if (!asset_id) {
     return NextResponse.json({ error: { code: 'INVALID_VALUE', message: 'asset_id is required' } }, { status: 400 })
   }
@@ -177,20 +146,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'INVALID_VALUE', message: 'quantity must be a non-negative number' } }, { status: 400 })
   }
 
-  // Check if this asset was previously held and what its quantity was (for acquired_at logic)
-  const { data: existingHolding } = await supabase
-    .from('holdings')
-    .select('quantity, acquired_at')
-    .eq('silo_id', silo_id)
-    .eq('asset_id', asset_id)
-    .single()
-
   const newQty = quantity ?? '0.00000000'
-  const prevQty = existingHolding?.quantity ?? '0'
-  const prevQtyNum = new Decimal(prevQty)
-  const newQtyNum = new Decimal(newQty)
-  // Set acquired_at when quantity first goes from 0 to >0 (new acquisition or re-buy after sell-out)
-  const shouldSetAcquiredAt = newQtyNum.gt(0) && prevQtyNum.lte(0)
 
   // Note: 'price' field is intentionally ignored — never stored in holdings
   const { data: holding, error: upsertError } = await supabase
@@ -200,16 +156,12 @@ export async function POST(request: NextRequest, { params }: { params: Params })
         silo_id,
         asset_id,
         quantity: newQty,
-        cost_basis: cost_basis ?? null,
-        cash_balance: cash_balance ?? '0.00000000',
         source: 'manual',
         last_updated_at: new Date().toISOString(),
-        // Set acquired_at on first acquisition (when qty goes from 0 to >0)
-        ...(shouldSetAcquiredAt ? { acquired_at: new Date().toISOString() } : {}),
       },
       { onConflict: 'silo_id,asset_id' }
     )
-    .select('id, asset_id, silo_id, quantity, cost_basis, cash_balance, source, last_updated_at, acquired_at')
+    .select('id, asset_id, silo_id, quantity, source, last_updated_at')
     .single()
 
   if (upsertError || !holding) {

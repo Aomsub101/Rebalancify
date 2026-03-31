@@ -18,7 +18,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 1. Verify silo ownership (RLS — AC8)
   const { data: silo } = await supabase
     .from('silos')
-    .select('id, drift_threshold')
+    .select('id, drift_threshold, cash_balance')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 2. Fetch holdings with asset join
   const { data: holdingsData } = await supabase
     .from('holdings')
-    .select('asset_id, quantity, cash_balance, assets(ticker, name, price_source)')
+    .select('asset_id, quantity, assets(ticker, name, price_source)')
     .eq('silo_id', silo_id)
 
   const rows = holdingsData ?? []
@@ -77,13 +77,14 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     }
   }))
 
-  // Compute silo total value (holdings value + cash balances)
-  const totalValue = rows.reduce((sum, h) => {
+  // Compute silo total value (holdings value + silo-level cash_balance)
+  // post-migration 23: cash_balance is on silos, not per-holding
+  const holdingsValue = rows.reduce((sum, h) => {
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
     const qty = new Decimal(h.quantity as string)
-    const cash = new Decimal(h.cash_balance as string ?? '0')
-    return sum.plus(qty.mul(price)).plus(cash)
+    return sum.plus(qty.mul(price))
   }, new Decimal(0))
+  const totalValue = holdingsValue.plus(new Decimal(silo.cash_balance as string ?? '0'))
 
   // Compute per-asset drift (AC1, AC2, AC3)
   const assets = rows.map(h => {

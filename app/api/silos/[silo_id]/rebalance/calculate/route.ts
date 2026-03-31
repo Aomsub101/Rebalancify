@@ -22,13 +22,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { calculateRebalance, EngineHolding, EngineWeight } from '@/lib/rebalanceEngine'
+import { fetchPrice } from '@/lib/priceService'
 
 type Params = Promise<{ silo_id: string }>
 
 interface CalcRequest {
   mode?: 'partial' | 'full'
-  include_cash?: boolean
-  cash_amount?: string
 }
 
 function unauthorized() {
@@ -67,8 +66,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   }
 
   const mode = body.mode ?? 'partial'
-  const include_cash = body.include_cash ?? false
-  const cash_amount = body.cash_amount ?? '0.00000000'
 
   if (mode !== 'partial' && mode !== 'full') {
     return NextResponse.json(
@@ -78,12 +75,12 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   }
 
   // -------------------------------------------------------------------------
-  // Verify silo ownership (RLS double-check)
+  // Verify silo ownership (RLS double-check) + fetch cash_balance
   // -------------------------------------------------------------------------
 
   const { data: silo } = await supabase
     .from('silos')
-    .select('id, user_id')
+    .select('id, user_id, cash_balance')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
@@ -97,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('asset_id, quantity, cash_balance, assets(ticker)')
+    .select('asset_id, quantity, assets(ticker)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -110,7 +107,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   const holdingsRows = (holdingsData ?? []) as unknown as Array<{
     asset_id: string
     quantity: string
-    cash_balance: string
     assets: { ticker: string }
   }>
 
@@ -159,12 +155,46 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   const { data: assetData } = await supabase
     .from('assets')
-    .select('id, ticker')
+    .select('id, ticker, price_source')
     .in('id', allAssetIds.length > 0 ? allAssetIds : ['00000000-0000-0000-0000-000000000000'])
 
   const assetTickerMap = new Map<string, string>(
     (assetData ?? []).map(a => [a.id, a.ticker]),
   )
+  const assetSourceMap = new Map<string, string>(
+    (assetData ?? []).map(a => [a.id, a.price_source ?? 'finnhub']),
+  )
+
+  // -------------------------------------------------------------------------
+  // Step 2 fix: on-demand price fetch for uncached assets
+  // -------------------------------------------------------------------------
+
+  const missingIds = allAssetIds.filter(id => !priceMap.has(id) || priceMap.get(id) === '0')
+  for (const assetId of missingIds) {
+    const ticker = assetTickerMap.get(assetId) ?? assetId
+    const source = assetSourceMap.get(assetId) ?? 'finnhub'
+    try {
+      const result = await fetchPrice(
+        supabase,
+        assetId,
+        ticker,
+        source as 'finnhub' | 'coingecko',
+      )
+      priceMap.set(assetId, result.price)
+      // Upsert into price_cache so subsequent calls are fast
+      await supabase
+        .from('price_cache')
+        .upsert({
+          asset_id: assetId,
+          price: result.price,
+          currency: 'USD',
+          source: result.source,
+          fetched_at: new Date().toISOString(),
+        }, { onConflict: 'asset_id' })
+    } catch {
+      // non-fatal: exclude this asset from the engine
+    }
+  }
 
   // -------------------------------------------------------------------------
   // Build engine input: holdings + zero-qty entries for weight-only assets
@@ -175,7 +205,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
       asset_id: h.asset_id,
       ticker: h.assets.ticker,
       quantity: String(h.quantity),
-      cash_balance: String(h.cash_balance),
       price: priceMap.get(h.asset_id) ?? '0',
     }))
 
@@ -186,7 +215,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
         asset_id: w.asset_id,
         ticker: assetTickerMap.get(w.asset_id) ?? w.asset_id,
         quantity: '0.00000000',
-        cash_balance: '0.00000000',
         price: priceMap.get(w.asset_id) ?? '0',
       })
     }
@@ -205,8 +233,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
     holdings: engineHoldings,
     weights: engineWeights,
     mode,
-    include_cash,
-    cash_amount,
+    cashBalance: String(silo.cash_balance ?? '0'),
   })
 
   // -------------------------------------------------------------------------
@@ -239,8 +266,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
       silo_id,
       user_id: user.id,
       mode,
-      cash_included: include_cash,
-      cash_amount: include_cash ? cash_amount : null,
       weights_sum_pct: result.weights_sum_pct.toFixed(3),
       cash_target_pct: result.cash_target_pct.toFixed(3),
       snapshot_before: result.snapshot_before,

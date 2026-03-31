@@ -27,6 +27,7 @@ export default function NewSiloPage() {
   const [platformType, setPlatformType] = useState<PlatformType>('alpaca')
   const [baseCurrency, setBaseCurrency] = useState<string>('USD')
   const [driftThreshold, setDriftThreshold] = useState<string>('5')
+  const [cashBalance, setCashBalance] = useState<string>('0')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,6 +60,7 @@ export default function NewSiloPage() {
           platform_type: platformType,
           base_currency: baseCurrency,
           drift_threshold: threshold,
+          cash_balance: cashBalance || '0.00000000',
         }),
       })
 
@@ -215,6 +217,36 @@ export default function NewSiloPage() {
             Alert when any asset drifts more than this % from its target weight.
           </p>
         </div>
+
+        {/* Cash balance — manual silos only */}
+        {platformType === 'manual' && (
+          <div>
+            <label
+              htmlFor="cash-balance"
+              className="block text-sm font-medium text-foreground mb-1.5"
+            >
+              Cash balance ({baseCurrency})
+            </label>
+            <input
+              id="cash-balance"
+              type="number"
+              value={cashBalance}
+              onChange={(e) => setCashBalance(e.target.value)}
+              min={0}
+              step={0.01}
+              placeholder="0.00"
+              className={cn(
+                'w-40 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono text-foreground',
+                'placeholder:text-muted-foreground',
+                'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+              aria-label="Cash balance"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Starting cash held in this silo (not invested in any asset).
+            </p>
+          </div>
+        )}
 
         {/* Actions — no form tag per CLAUDE.md Rule 1 */}
         <div className="flex items-center justify-end gap-3 pt-2">

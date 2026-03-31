@@ -4,18 +4,22 @@
  * Pure function — no DB calls, no side effects.
  * The API route is responsible for fetching data and persisting results.
  *
- * STORY-010 implements: partial mode + session data preparation
- * STORY-010b implements: full mode, pre-flight 422, cash injection unit tests
+ * Post-migration-23: cash_balance lives on silos, not on individual holdings.
+ * Cash is a first-class target weight (the complement of asset weights to 100%).
  *
- * Partial mode algorithm:
- *   1. total_value = Σ(qty × price) + Σ(cash_balance) + injected_cash
- *   2. For each asset with a target weight, compute delta = target_value − current_value
- *   3. SELL (delta < 0): sell_qty = ceil(|delta| / price), capped at holding.quantity
- *   4. BUY  (delta > 0): buy_qty = floor(delta / price)
- *   5. available = Σ(cash_balance) + injected_cash + sell_proceeds
- *   6. Scale all buys proportionally if total_buy_cost > available
- *   7. Filter zero-quantity orders
- *   8. Compute weight_before_pct and weight_after_pct per order
+ * Partial mode:
+ *   1. total = Σ(qty × price) + cashBalance
+ *   2. SELL overweight assets (ceil to whole shares, cap at holding qty)
+ *   3. Pool = existingCash + sellProceeds
+ *   4. BUY underweight assets using pool only (floor, then scale proportionally if insufficient)
+ *
+ * Full mode:
+ *   1. total = Σ(qty × price) + cashBalance
+ *   2. Cash target weight = 100 − sum(non-cash weights)
+ *   3. Compute delta for each asset (target − current)
+ *   4. If cash is over target: buy underweight assets proportionally
+ *      If cash is under target: sell overweight assets proportionally
+ *   5. Round quantities (half-up) — no scaling; pre-flight if capital insufficient
  *
  * All arithmetic uses decimal.js to avoid floating-point error (CLAUDE.md Rule 3).
  */
@@ -31,8 +35,6 @@ export interface EngineHolding {
   ticker: string
   /** NUMERIC(20,8) as string — e.g. "10.00000000" */
   quantity: string
-  /** NUMERIC(20,8) as string — sum of cash balances across the silo */
-  cash_balance: string
   /** NUMERIC(20,8) as string — from price_cache */
   price: string
 }
@@ -47,9 +49,8 @@ export interface EngineInput {
   holdings: EngineHolding[]
   weights: EngineWeight[]
   mode: 'partial' | 'full'
-  include_cash: boolean
-  /** NUMERIC(20,8) as string — '0.00000000' when not injecting cash */
-  cash_amount: string
+  /** NUMERIC(20,8) — the silo's cash_balance (post-migration 23) */
+  cashBalance: string
 }
 
 export interface EngineOrder {
@@ -112,7 +113,7 @@ function floorAt8(d: Decimal): Decimal {
   return d.toDecimalPlaces(8, Decimal.ROUND_DOWN)
 }
 
-/** Round to 8 decimal places, half-up (for buy quantities in full mode — ±0.01% accuracy). */
+/** Round to 8 decimal places, half-up (for buy quantities in full mode). */
 function roundAt8(d: Decimal): Decimal {
   return d.toDecimalPlaces(8, Decimal.ROUND_HALF_UP)
 }
@@ -131,45 +132,32 @@ function toPct3(d: Decimal): number {
 // Main export
 // ---------------------------------------------------------------------------
 
-/**
- * Calculate rebalancing orders for a silo.
- *
- * For STORY-010, only partial mode is implemented.
- * Full mode throws a descriptive error (implemented in STORY-010b).
- */
 export function calculateRebalance(input: EngineInput): EngineResult {
-  const { holdings, weights, mode, include_cash, cash_amount } = input
+  const { holdings, weights, mode, cashBalance } = input
 
   // -------------------------------------------------------------------------
   // Build lookup maps
   // -------------------------------------------------------------------------
 
-  /** asset_id → EngineHolding */
   const holdingMap = new Map<string, EngineHolding>(
-    holdings.map(h => [h.asset_id, h])
+    holdings.map(h => [h.asset_id, h]),
   )
-
-  /** asset_id → weight_pct as Decimal */
   const weightMap = new Map<string, Decimal>(
-    weights.map(w => [w.asset_id, new Decimal(w.weight_pct)])
+    weights.map(w => [w.asset_id, new Decimal(w.weight_pct)]),
   )
 
   // -------------------------------------------------------------------------
   // Step 1 — Compute total portfolio value
   // -------------------------------------------------------------------------
 
-  const injectedCash = include_cash ? new Decimal(cash_amount) : new Decimal(0)
+  const siloCash = new Decimal(cashBalance ?? '0')
 
   let assetValue = new Decimal(0)
-  let existingCash = new Decimal(0)
-
   for (const h of holdings) {
-    const val = new Decimal(h.quantity).mul(h.price)
-    assetValue = assetValue.plus(val)
-    existingCash = existingCash.plus(h.cash_balance)
+    assetValue = assetValue.plus(new Decimal(h.quantity).mul(h.price))
   }
 
-  const totalValue = assetValue.plus(existingCash).plus(injectedCash)
+  const totalValue = assetValue.plus(siloCash)
 
   // -------------------------------------------------------------------------
   // Step 2 — Compute weights_sum_pct and cash_target_pct
@@ -215,140 +203,208 @@ export function calculateRebalance(input: EngineInput): EngineResult {
   }
 
   // -------------------------------------------------------------------------
-  // Step 4 — Compute deltas; build raw sell/buy orders
+  // Step 4 — Compute deltas for all assets in weights
   // -------------------------------------------------------------------------
 
-  // Collect all asset_ids that appear in weights
   const allAssetIds = new Set<string>([
     ...weights.map(w => w.asset_id),
-    ...holdings.map(h => h.asset_id)
+    ...holdings.map(h => h.asset_id),
   ])
 
-  interface RawOrder {
+  interface AssetInfo {
     asset_id: string
     ticker: string
-    order_type: 'buy' | 'sell'
-    quantity: Decimal   // before scale-down
+    targetWeightPct: Decimal
+    targetValue: Decimal
+    currentValue: Decimal
+    holding: EngineHolding | undefined
     price: Decimal
-    current_value: Decimal
   }
 
-  const rawSells: RawOrder[] = []
-  const rawBuys: RawOrder[] = []
+  const assets: AssetInfo[] = []
 
   for (const assetId of allAssetIds) {
     const targetWeightPct = weightMap.get(assetId) ?? new Decimal(0)
     const targetValue = totalValue.mul(targetWeightPct).div(100)
-
     const holding = holdingMap.get(assetId)
     const price = holding ? new Decimal(holding.price) : new Decimal(0)
     const currentValue = holding ? new Decimal(holding.quantity).mul(price) : new Decimal(0)
     const ticker = holding?.ticker ?? assetId
 
-    if (price.isZero()) {
-      // No price data — cannot generate order
-      continue
-    }
+    if (price.isZero()) continue
 
-    // Skip orphaned holdings: assets in holdings but with no entry in target_weights.
-    // Assets with explicit weight_pct = 0 are NOT skipped — they get a SELL order
-    // to exit the position. weightMap.has() returns false for undefined (no entry)
-    // and true for 0 (explicit zero weight), which is the correct distinction.
-    if (!weightMap.has(assetId)) {
-      continue
-    }
-
-    const delta = targetValue.minus(currentValue)
-
-    if (delta.lt('-0.00000001')) {
-      // Overweight → SELL
-      const sellValue = delta.abs()
-      let sellQty = ceilAt8(sellValue.div(price))
-      // Cap at holding quantity (can't sell more than we have)
-      if (holding) {
-        const holdQty = new Decimal(holding.quantity)
-        if (sellQty.gt(holdQty)) {
-          sellQty = holdQty
-        }
-      }
-      if (sellQty.gt(0)) {
-        rawSells.push({ asset_id: assetId, ticker, order_type: 'sell', quantity: sellQty, price, current_value: currentValue })
-      }
-    } else if (delta.gt('0.00000001')) {
-      // Underweight → BUY
-      // Partial mode: floor (conservative — never overspend)
-      // Full mode: round half-up (closest to target — achieves ±0.01% accuracy)
-      const buyQty = mode === 'full'
-        ? roundAt8(delta.div(price))
-        : floorAt8(delta.div(price))
-      if (buyQty.gt(0)) {
-        rawBuys.push({ asset_id: assetId, ticker, order_type: 'buy', quantity: buyQty, price, current_value: currentValue })
-      }
-    }
-    // Within epsilon → no order (handled by filter above)
+    assets.push({ asset_id: assetId, ticker, targetWeightPct, targetValue, currentValue, holding, price })
   }
 
   // -------------------------------------------------------------------------
-  // Step 5 — Pool available capital; scale down buys if needed
+  // Step 5 — Build raw sell/buy orders
+  // -------------------------------------------------------------------------
+
+  interface RawOrder {
+    asset_id: string
+    ticker: string
+    order_type: 'buy' | 'sell'
+    quantity: Decimal
+    price: Decimal
+    currentValue: Decimal
+  }
+
+  const rawSells: RawOrder[] = []
+  const rawBuys: RawOrder[] = []
+
+  for (const a of assets) {
+    const delta = a.targetValue.minus(a.currentValue)
+
+    if (delta.lt(0)) {
+      // Overweight → SELL
+      let sellQty = ceilAt8(delta.abs().div(a.price))
+      if (a.holding) {
+        const holdQty = new Decimal(a.holding.quantity)
+        if (sellQty.gt(holdQty)) sellQty = holdQty
+      }
+      if (sellQty.gt(0)) {
+        rawSells.push({ asset_id: a.asset_id, ticker: a.ticker, order_type: 'sell', quantity: sellQty, price: a.price, currentValue: a.currentValue })
+      }
+    } else if (delta.gt(0)) {
+      // Underweight → BUY
+      const buyQty = mode === 'full'
+        ? roundAt8(delta.div(a.price))
+        : floorAt8(delta.div(a.price))
+      if (buyQty.gt(0)) {
+        rawBuys.push({ asset_id: a.asset_id, ticker: a.ticker, order_type: 'buy', quantity: buyQty, price: a.price, currentValue: a.currentValue })
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 6 — Mode-specific processing
   // -------------------------------------------------------------------------
 
   const sellProceeds = rawSells.reduce(
     (sum, o) => sum.plus(o.quantity.mul(o.price)),
-    new Decimal(0)
+    new Decimal(0),
   )
-  const available = existingCash.plus(injectedCash).plus(sellProceeds)
+  const available = siloCash.plus(sellProceeds)
 
-  const totalBuyCost = rawBuys.reduce(
+  let totalBuyCost = rawBuys.reduce(
     (sum, o) => sum.plus(o.quantity.mul(o.price)),
-    new Decimal(0)
+    new Decimal(0),
   )
 
-  // Pre-flight balance check — behaviour differs by mode:
-  //   Partial: scale down buys to fit available capital (always balance_valid=true)
-  //   Full:    if buy cost exceeds available, mark balance_valid=false (pre-flight 422)
   let balanceValid = true
   let balanceErrors: string[] = []
 
   if (mode === 'partial') {
+    // Scale down buys proportionally to fit available capital
     if (totalBuyCost.gt(available) && !available.isZero()) {
       const scaleFactor = available.div(totalBuyCost)
       for (const buy of rawBuys) {
         buy.quantity = floorAt8(buy.quantity.mul(scaleFactor))
       }
     } else if (totalBuyCost.gt(available) && available.isZero()) {
-      // No capital at all → zero all buys
       for (const buy of rawBuys) {
         buy.quantity = new Decimal(0)
       }
     }
   } else {
-    // Full mode: pre-flight — refuse if capital is insufficient
-    if (totalBuyCost.gt(available)) {
-      const shortfall = totalBuyCost.minus(available)
+    // Full mode: treat cash as a target-weight asset
+    // targetCash − currentCash determines extra buys or sells
+    const targetCash = totalValue.mul(cashTargetPct).div(100)
+    const cashAfterBaseTrades = siloCash.plus(sellProceeds).minus(totalBuyCost)
+    const cashDelta = targetCash.minus(cashAfterBaseTrades) // positive = need more cash
+
+    if (cashDelta.lt(0)) {
+      // Cash is too HIGH — spend excess by buying underweight assets proportionally
+      const excessCash = cashDelta.abs()
+      const underAssets = assets.filter(a => {
+        const d = a.targetValue.minus(a.currentValue)
+        return d.gt(0) && a.price.gt(0)
+      })
+      const totalUnder = underAssets.reduce(
+        (sum, a) => sum.plus(a.targetValue.minus(a.currentValue)),
+        new Decimal(0),
+      )
+      if (totalUnder.gt(0) && excessCash.gt(0)) {
+        for (const a of underAssets) {
+          const underAmt = a.targetValue.minus(a.currentValue)
+          const ratio = underAmt.div(totalUnder)
+          const extraValue = excessCash.mul(ratio)
+          const extraQty = roundAt8(extraValue.div(a.price))
+          if (extraQty.gt(0)) {
+            const existing = rawBuys.find(b => b.asset_id === a.asset_id)
+            if (existing) {
+              existing.quantity = existing.quantity.plus(extraQty)
+            } else {
+              rawBuys.push({ asset_id: a.asset_id, ticker: a.ticker, order_type: 'buy', quantity: extraQty, price: a.price, currentValue: a.currentValue })
+            }
+          }
+        }
+      }
+    } else if (cashDelta.gt(0)) {
+      // Cash is too LOW — raise cash by selling overweight assets proportionally
+      const shortfall = cashDelta
+      const overAssets = assets.filter(a => {
+        const d = a.targetValue.minus(a.currentValue)
+        return d.lt(0) && a.price.gt(0)
+      })
+      const totalOver = overAssets.reduce(
+        (sum, a) => sum.plus(a.currentValue.minus(a.targetValue)),
+        new Decimal(0),
+      )
+      if (totalOver.gt(0) && shortfall.gt(0)) {
+        for (const a of overAssets) {
+          const overAmt = a.currentValue.minus(a.targetValue)
+          const ratio = overAmt.div(totalOver)
+          const sellValue = shortfall.mul(ratio)
+          let extraSellQty = ceilAt8(sellValue.div(a.price))
+          if (a.holding) {
+            const holdQty = new Decimal(a.holding.quantity)
+            if (extraSellQty.gt(holdQty)) extraSellQty = holdQty
+          }
+          if (extraSellQty.gt(0)) {
+            const existing = rawSells.find(s => s.asset_id === a.asset_id)
+            if (existing) {
+              existing.quantity = existing.quantity.plus(extraSellQty)
+            } else {
+              rawSells.push({ asset_id: a.asset_id, ticker: a.ticker, order_type: 'sell', quantity: extraSellQty, price: a.price, currentValue: a.currentValue })
+            }
+          }
+        }
+      }
+    }
+
+    // Recompute buy cost after cash-adjustment buys were added
+    totalBuyCost = rawBuys.reduce(
+      (sum, o) => sum.plus(o.quantity.mul(o.price)),
+      new Decimal(0),
+    )
+    const finalSellProceeds = rawSells.reduce(
+      (sum, o) => sum.plus(o.quantity.mul(o.price)),
+      new Decimal(0),
+    )
+    const finalAvailable = siloCash.plus(finalSellProceeds)
+
+    if (totalBuyCost.gt(finalAvailable)) {
+      const shortfall = totalBuyCost.minus(finalAvailable)
       balanceValid = false
       balanceErrors = [
-        `Insufficient capital: need ${toFixed8(totalBuyCost)}, have ${toFixed8(available)} (shortfall: ${toFixed8(shortfall)})`,
+        `Insufficient capital: need ${toFixed8(totalBuyCost)}, have ${toFixed8(finalAvailable)} (shortfall: ${toFixed8(shortfall)})`,
       ]
     }
   }
 
   // -------------------------------------------------------------------------
-  // Step 6 — Build final orders (filter zero-qty, compute weight_after)
+  // Step 7 — Build final orders
   // -------------------------------------------------------------------------
 
   const finalOrders: EngineOrder[] = []
 
-  // Process sells
   for (const sell of rawSells) {
     if (sell.quantity.lte(0)) continue
     const estValue = sell.quantity.mul(sell.price)
-    const weightBefore = totalValue.isZero()
-      ? new Decimal(0)
-      : sell.current_value.div(totalValue).mul(100)
-    const valueAfter = sell.current_value.minus(estValue)
-    const weightAfter = totalValue.isZero()
-      ? new Decimal(0)
-      : valueAfter.div(totalValue).mul(100)
+    const weightBefore = totalValue.isZero() ? new Decimal(0) : sell.currentValue.div(totalValue).mul(100)
+    const valueAfter = sell.currentValue.minus(estValue)
+    const weightAfter = totalValue.isZero() ? new Decimal(0) : valueAfter.div(totalValue).mul(100)
 
     finalOrders.push({
       asset_id: sell.asset_id,
@@ -362,17 +418,12 @@ export function calculateRebalance(input: EngineInput): EngineResult {
     })
   }
 
-  // Process buys
   for (const buy of rawBuys) {
     if (buy.quantity.lte(0)) continue
     const estValue = buy.quantity.mul(buy.price)
-    const weightBefore = totalValue.isZero()
-      ? new Decimal(0)
-      : buy.current_value.div(totalValue).mul(100)
-    const valueAfter = buy.current_value.plus(estValue)
-    const weightAfter = totalValue.isZero()
-      ? new Decimal(0)
-      : valueAfter.div(totalValue).mul(100)
+    const weightBefore = totalValue.isZero() ? new Decimal(0) : buy.currentValue.div(totalValue).mul(100)
+    const valueAfter = buy.currentValue.plus(estValue)
+    const weightAfter = totalValue.isZero() ? new Decimal(0) : valueAfter.div(totalValue).mul(100)
 
     finalOrders.push({
       asset_id: buy.asset_id,
@@ -385,10 +436,6 @@ export function calculateRebalance(input: EngineInput): EngineResult {
       weight_after_pct: toPct3(weightAfter),
     })
   }
-
-  // -------------------------------------------------------------------------
-  // Result
-  // -------------------------------------------------------------------------
 
   return {
     orders: finalOrders,
