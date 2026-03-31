@@ -9,8 +9,10 @@ import type { Holding } from '@/lib/types/holdings'
 // Static import — fails at build time during Red phase until hook is created
 import { useSimulationConstraints } from '@/hooks/useSimulationConstraints'
 
-// Helper: create a holding with a given market_debut_date (age check) and asset_created_at (portfolio age)
-function makeHolding(overrides: Partial<Holding> & { market_debut_date: string; asset_created_at: string }): Holding {
+// Helper: create a holding with a given market_debut_date (age check).
+// asset_created_at is intentionally omitted — the Holding interface makes it optional
+// and the simulation constraints hook does not use it (only market_debut_date matters).
+function makeHolding(overrides: Partial<Holding> & { market_debut_date: string }): Holding {
   return {
     id: 'h1',
     asset_id: 'a1',
@@ -28,8 +30,6 @@ function makeHolding(overrides: Partial<Holding> & { market_debut_date: string; 
     source: 'manual',
     stale_days: 0,
     last_updated_at: new Date().toISOString(),
-    market_debut_date: '2020-01-01', // default — old enough for 3-month tests
-    asset_created_at: '2024-01-01',   // portfolio age — no longer used for age check
     ...overrides,
   }
 }
