@@ -49,6 +49,7 @@ Run migrations in this exact order to respect foreign key dependencies:
 16_notifications.sql          ← depends on auth.users, silos
 17_pg_cron_drift_digest.sql   ← pg_cron job: daily at 08:00 UTC, checks drift thresholds, inserts in-app notifications ONLY. Email is sent separately by the Vercel Cron Job at app/api/cron/drift-digest/route.ts (see ADR-013).
 18_pg_cron_news_purge.sql     ← pg_cron job: daily at 02:00 UTC, deletes news_cache rows older than 24 hours
+23_asset_historical_data.sql  ← global price history cache for yfinance data (EPIC-11)
 ```
 
 ---
@@ -492,6 +493,23 @@ CREATE TABLE research_sessions (
 ALTER TABLE research_sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY research_sessions_owner ON research_sessions
   USING (user_id = auth.uid());
+```
+
+---
+
+### asset_historical_data (v2.0 — global price history cache)
+
+```sql
+CREATE TABLE asset_historical_data (
+  ticker             TEXT        PRIMARY KEY,
+  historical_prices JSONB       NOT NULL,
+  -- Array of { date: "YYYY-MM-DD", close: number }
+  -- Sorted by date ascending
+  last_updated      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- No RLS: global read cache written by server-side code only.
+-- Read by: POST /api/optimize Python function (service role key).
+-- Written by: yfinance fetch in POST /api/optimize on cache miss.
 ```
 
 ---
