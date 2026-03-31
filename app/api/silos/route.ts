@@ -1,8 +1,41 @@
 import { NextResponse } from 'next/server'
+import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { checkSiloLimit, buildSiloResponse } from '@/lib/silos'
 
 const VALID_PLATFORM_TYPES = ['alpaca', 'bitkub', 'innovestx', 'schwab', 'webull', 'manual'] as const
+
+async function computeSiloTotalValue(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  siloId: string,
+  cashBalance: string
+): Promise<string> {
+  const { data: holdingsData } = await supabase
+    .from('holdings')
+    .select('asset_id, quantity')
+    .eq('silo_id', siloId)
+
+  const rows = holdingsData ?? []
+  if (rows.length === 0) {
+    return cashBalance
+  }
+
+  const assetIds = rows.map(h => h.asset_id)
+
+  const { data: priceData } = await supabase
+    .from('price_cache')
+    .select('asset_id, price')
+    .in('asset_id', assetIds)
+
+  const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
+
+  const holdingsValue = rows.reduce((sum, h) => {
+    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
+    return sum.plus(new Decimal(h.quantity as string).mul(price))
+  }, new Decimal(0))
+
+  return holdingsValue.plus(new Decimal(cashBalance ?? '0')).toFixed(8)
+}
 
 export async function GET() {
   const supabase = await createClient()
@@ -33,7 +66,16 @@ export async function GET() {
   const silos = silosResult.data ?? []
   const alpacaMode = profileResult.data?.alpaca_mode ?? 'paper'
   const activeSiloCount = silos.length
-  const response = silos.map((silo) => buildSiloResponse(silo, activeSiloCount, 5, alpacaMode))
+
+  const totalValues = await Promise.all(
+    silos.map(silo => computeSiloTotalValue(supabase, silo.id, silo.cash_balance ?? '0'))
+  )
+
+  const response = silos.map((silo, i) => {
+    const r = buildSiloResponse(silo, activeSiloCount, 5, alpacaMode)
+    r.total_value = totalValues[i]
+    return r
+  })
 
   return NextResponse.json(response)
 }

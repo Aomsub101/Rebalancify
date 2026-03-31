@@ -40,7 +40,15 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'FETCH_FAILED', message: holdingsError.message } }, { status: 500 })
   }
 
-  const rows = holdingsData ?? []
+  let rows = holdingsData ?? []
+
+  // Step 3: Enforce platform isolation for API silos
+  // Manual silos show all holdings; API silos show only holdings from that platform's sync source
+  if (silo.platform_type !== 'manual') {
+    const platformSource = `${silo.platform_type}_sync`
+    rows = rows.filter(h => h.source === platformSource)
+  }
+
   const assetIds = rows.map(h => h.asset_id)
 
   // 3. Fetch prices (public read — no user filter)

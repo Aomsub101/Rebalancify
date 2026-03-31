@@ -127,6 +127,8 @@ export function SiloDetailView({ silo }: Props) {
             totalValue={data.total_value}
             cashBalance={data.cash_balance}
             baseCurrency={silo.base_currency}
+            siloId={silo.id}
+            isManual={isManual}
           />
           <WeightsSumBar holdings={data.holdings} weightsSumPct={weightsSumPct} />
 
