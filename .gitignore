@@ -44,3 +44,4 @@ coverage/
 
 # Agent session templates (never tracked)
 templates/
+__pycache__/

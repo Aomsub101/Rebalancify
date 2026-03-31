@@ -160,6 +160,17 @@
 
 ---
 
+## Phase 10 — Portfolio Projection & Optimization (v2.0) (EPIC-11)
+
+| # | Task | Story | Depends On | Produces |
+|---|---|---|---|---|
+| 10.1 | `asset_historical_data` table + Supabase migration | STORY-040 | 0.2 | Global price history cache table |
+| 10.2 | `POST /api/optimize` Python function (scipy.optimize, yfinance fetch) | STORY-041 | 10.1 | Optimization API with 3 strategies |
+| 10.3 | `SimulateScenariosButton` + constraint logic + deduplication | STORY-042 | 10.2 | Button UX on SiloDetailPage |
+| 10.4 | `SimulationResultsTable` + TruncationWarning + Apply Weights wiring | STORY-043 | 10.3 | Results UI on SiloDetailPage |
+
+---
+
 ## Hard Dependency Rules
 
 1. Phase 2 (Alpaca execution) must be complete before Phase 9 (multi-platform execution) — Phase 9 reuses the execute endpoint pattern.
@@ -167,3 +178,4 @@
 3. Phase 8 (AI Research Hub) must complete before Phase 9 for v2.0 release sequencing. There is no shared infrastructure dependency — the encrypted key pattern was established in Phase 2 (STORY-009) and broker credentials were stored in Phase 3. The sequencing is a product decision: the full v2.0 release ships Phase 8 and Phase 9 together.
 4. Never start Phase 8 without Phase 0.2 (all migrations) and Phase 2.1 (key encryption pattern) complete.
 5. v2.0 tables (`knowledge_chunks`, `research_sessions`) are migrated in Phase 0.2 — they exist from day one but are unused until Phase 8.
+6. Phase 10 (Portfolio Projection) must start only after Phase 8 (EPIC-09 AI Research Hub) is complete — v2.0 story numbering and the remaining v2.0 scope depend on it.

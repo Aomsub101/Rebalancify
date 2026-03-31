@@ -136,6 +136,13 @@ SiloDetailPage
 │       ├── TargetWeightCell (editable inline)
 │       ├── DriftCell (DriftBadge — green/yellow/red)
 │       └── StalenessTag (conditional — "> X days old" for manual holdings > 7 days)
+├── SimulationSection (v2.0 — EPIC-11)
+│   ├── SimulateScenariosButton (disabled if < 2 assets or any asset < 3 months old)
+│   ├── SimulationResultsTable (shown after successful simulation)
+│   │   ├── SimulationDisclaimer (non-collapsible, always visible during simulation)
+│   │   ├── TruncationWarning (conditional — shown if lookback < 36 months)
+│   │   └── StrategyCard × 3 (Not to Lose / Expected / Optimistic)
+│   └── ApplyWeightsButton × 3 (per strategy — pre-fills TargetWeightCell)
 ├── CashBalanceRow (editable for manual silos; shows cash_target_pct)
 ├── AddAssetButton → AssetSearchModal
 ├── RebalanceButton → /silos/[silo_id]/rebalance
@@ -344,6 +351,11 @@ ResearchPage
 | `LoadingSkeleton` | All data-fetching components | Skeleton placeholders during load |
 | `AlpacaLiveBadge` | SiloCard, SiloHeader, RebalancePage | Persistent amber LIVE badge when Alpaca in live mode |
 | `AiInsightTag` | PeerCard | v2.0 only — 12-word LLM relationship insight |
+| `SimulateScenariosButton` | SiloDetailPage | v2.0 — triggers portfolio simulation; disabled if < 2 assets or any asset < 3 months old |
+| `SimulationResultsTable` | SiloDetailPage | v2.0 — renders 3 strategy cards after successful simulation |
+| `SimulationDisclaimer` | SiloDetailPage | v2.0 — non-collapsible disclaimer above results |
+| `TruncationWarning` | SiloDetailPage | v2.0 — amber warning when lookback < 36 months |
+| `StrategyCard` | SimulationResultsTable | v2.0 — one row: strategy name, weights, return range, Apply Weights button |
 
 ---
 

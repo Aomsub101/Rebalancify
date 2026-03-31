@@ -186,3 +186,21 @@
 | STORY-039 | Settings — remove manual-only execution notices for newly automated platforms | 0.5d |
 
 *Story files are deferred. Create `stories/EPIC-10-multi-platform-execution/STORY-034.md` through `STORY-039.md` at the start of Phase 9 using `stories/STORY-TEMPLATE.md`.*
+
+---
+
+## EPIC-11 — Portfolio Projection & Optimization (v2.0)
+
+**Phase:** 10
+**Version:** v2.0
+**Status:** ⬜ Planned
+**PRD mapping:** `docs/prd/features/F11-portfolio-projection-optimization.md` (F11-R1 through F11-R14)
+**Scope:** yfinance historical data caching layer, Python scipy.optimize serverless endpoint with three mean-variance strategies (Global Min Volatility, Max Sharpe, Target Risk), SimulateScenariosButton with min-2-assets and min-3-months constraints, SimulationResultsTable with TruncationWarning and Apply Weights wiring. Lives inline in SiloDetailPage.
+**Blocked by:** EPIC-09 (complete — required for Phase 10 start)
+
+| Story | Title | Effort |
+|---|---|---|
+| STORY-040 | `asset_historical_data` table + yfinance UPSERT | 1.5d |
+| STORY-041 | Python optimization API (`POST /api/optimize`) | 2d |
+| STORY-042 | SimulateScenariosButton + constraint logic | 1.5d |
+| STORY-043 | SimulationResultsTable + Apply Weights wiring | 1.5d |

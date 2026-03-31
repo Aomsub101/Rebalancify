@@ -546,6 +546,73 @@ Returns the total storage size of the `knowledge_chunks` table in bytes. Used fo
 }
 ```
 
+## Optimization Endpoint (v2.0)
+
+### POST /api/optimize
+
+Portfolio simulation endpoint — runs mean-variance optimization on a list of tickers and returns three strategy allocations with 3-month projections. Implemented as a Python serverless function (`@vercel/python` runtime). The function reads from `asset_historical_data` (Supabase), fetches from yfinance on cache miss, and returns the result.
+
+**Request:**
+```json
+{
+  "tickers": ["AAPL", "TSLA"]
+}
+```
+
+**Response (200):**
+```json
+{
+  "strategies": {
+    "not_to_lose": {
+      "weights": { "AAPL": 0.4, "TSLA": 0.6 },
+      "return_3m": "2.34%",
+      "range": "2.34% ± 1.20%"
+    },
+    "expected": {
+      "weights": { "AAPL": 0.55, "TSLA": 0.45 },
+      "return_3m": "3.10%",
+      "range": "3.10% ± 1.45%"
+    },
+    "optimistic": {
+      "weights": { "AAPL": 0.70, "TSLA": 0.30 },
+      "return_3m": "4.20%",
+      "range": "4.20% ± 2.10%"
+    }
+  },
+  "metadata": {
+    "is_truncated_below_3_years": true,
+    "limiting_ticker": "OKLO",
+    "lookback_months": 8
+  }
+}
+```
+
+**Weights constraint:** Each `strategies[*].weights` object has values summing to `1.0` (within floating-point tolerance of 0.001).
+
+**Error 422:** `OPTIMIZATION_ERROR` — insufficient tickers, yfinance fetch failure, or optimization solver failure.
+```json
+{
+  "error": {
+    "code": "OPTIMIZATION_ERROR",
+    "message": "Failed to fetch data for ticker XYZ"
+  }
+}
+```
+
+**vercel.json configuration:**
+```json
+{
+  "functions": {
+    "api/optimize": {
+      "runtime": "@vercel/python",
+      "maximumDuration": 300
+    }
+  }
+}
+```
+
+---
+
 ### POST /api/knowledge/ingest
 Reads all default research files from the `/knowledge/` directory, chunks them, generates embeddings, and upserts them into `knowledge_chunks`.
 
