@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/optimize": {
+      "runtime": "@vercel/python",
+      "maximumDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/drift-digest",
