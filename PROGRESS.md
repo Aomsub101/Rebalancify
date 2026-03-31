@@ -156,7 +156,7 @@
 | Story     | Title                                               | Status | Completed |
 | --------- | --------------------------------------------------- | ------ | --------- |
 | STORY-040 | `asset_historical_data` table + yfinance UPSERT   | ✅     | 2026-03-31 |
-| STORY-041 | Python optimization API (`POST /api/optimize`)     | ⬜     | —        |
+| STORY-041 | Python optimization API (`POST /api/optimize`)     | ✅     | 2026-03-31 |
 | STORY-042 | SimulateScenariosButton + constraint logic         | ⬜     | —        |
 | STORY-043 | SimulationResultsTable + Apply Weights wiring      | ⬜     | —        |
 

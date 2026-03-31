@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-041 — Python Optimization API (`POST /api/optimize`)
+**Completed:** 2026-03-31
+**Effort:** 0.5 day (estimated 2d)
+
+**What was built:**
+- `api/optimize.py` — Python serverless function implementing F11-R3/R4/R5/R6/R7/R9/R14: dynamic truncation, annualized μ/Σ, three scipy.optimize strategies (min variance, max Sharpe Rf=0.04, target risk ≤1.5×σ_sharpe), 3-month projections.
+- `api/test_optimize.py` — 13 pytest unit tests covering truncation, annualized metrics, weight constraints, return ordering, vol constraint, and projection format.
+- `api/requirements.txt` — Python deps: yfinance, pandas, scipy, numpy, supabase.
+- `vercel.json` — added `functions.api/optimize` config with `@vercel/python` runtime and 300s maxDuration.
+
+**Decisions made:**
+- Used `api/optimize.py` at project root (not inside `app/`) — `@vercel/python` runtime convention; Vercel routes based on `vercel.json` `functions` key.
+- Python uses `yfinance` directly for fetching (not `lib/priceHistory.ts`) — keeps Python function self-contained and avoids Node.js/Python interop complexity.
+- PSD regularization added to Σ: if eigenvalues < 0, add `|λ_min| + 1e-8` × I to ensure solver stability.
+
+**Discovered issues / carry-over notes:**
+- STORY-042 (SimulateScenariosButton) will call `POST /api/optimize` via `fetch()` — the button should be wired to this endpoint.
+
+**Quality gates passed:** type-check ✅ | test 522/522 ✅ | build ✅ | pytest 13/13 ✅
+
+---
+
 ### STORY-040 — asset_historical_data table + yfinance UPSERT
 **Completed:** 2026-03-31
 **Effort:** 0.5 day (estimated 1.5d)
