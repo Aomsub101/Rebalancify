@@ -39,6 +39,27 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-040 — asset_historical_data table + yfinance UPSERT
+**Completed:** 2026-03-31
+**Effort:** 0.5 day (estimated 1.5d)
+
+**What was built:**
+- `supabase/migrations/23_asset_historical_data.sql` — creates `asset_historical_data` table (ticker TEXT PK, historical_prices JSONB, last_updated TIMESTAMPTZ) with no RLS — global cache, server-write only.
+- `lib/priceHistory.ts` — `fetchPriceHistory(ticker, supabase)` implementing stale-while-revalidate cache (24h TTL) using `yahoo-finance2`; sorts prices ascending; upserts result to Supabase.
+- `lib/priceHistory.test.ts` — 5 TDD tests: cache hit (no yfinance call), cache miss (yfinance + upsert), stale cache (yfinance + upsert), yfinance error (throws with ticker), sort order ascending.
+- `docs/architecture/02-database-schema.md` — added migration 23 to run order.
+- `package.json` — added `yahoo-finance2@3.14.0` dependency.
+
+**Decisions made:**
+- Used `yahoo-finance2` (Node.js, TypeScript-native) instead of Python yfinance — keeps price history fetching in the TypeScript service layer; Python endpoint (STORY-041) will call this service or use yfinance directly.
+- Supabase `.single()` throws PGRST116 on no rows — handled explicitly as cache miss rather than an error.
+- `yahoo-finance2` uses a default export with class instance; `historical()` returns `HistoricalRowHistory[]` typed array; used `as any` cast on the mock due to TypeScript overload complexity.
+
+**Discovered issues / carry-over notes:**
+- None — clean SWR implementation; STORY-041 (Python optimization API) will call this service.
+
+**Quality gates passed:** type-check ✅ | test 522/522 ✅ | coverage 93.44% ✅ | build ✅
+
 ### STORY-032b — Research endpoint — allocation guard + provider unit tests
 **Completed:** 2026-03-30
 **Effort:** 0.5 day (estimated 2d)

@@ -31,6 +31,7 @@ Rebalancify is a free, open-source, production-grade web application that gives 
 | TanStack Query | 5 | Server state management and cache invalidation |
 | React Context | — | Global UI state (session, USD toggle, silo count) |
 | Vercel | — | Zero-config deployment — free tier |
+| Vercel Python | — | Python serverless functions for optimization API (`@vercel/python` runtime) |
 | Resend | — | Transactional email — daily drift digest — 3,000 emails/month free |
 | Finnhub | — | Stock/ETF prices, news, peer data, company profiles |
 | FMP | — | News fallback, fundamentals |
@@ -139,9 +140,10 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 
 ## 5. Current Build Phase
 
-**Active Epic:** EPIC-09 — AI Research Hub (v2.0)
-**Active Story:** STORY-033 — Research Hub UI (structured cards + disclaimer)
-**Last Completed:** STORY-032b — Research endpoint — allocation guard + provider unit tests (2026-03-30)
+**Active Epic:** EPIC-11 — Portfolio Projection & Optimization (v2.0)
+**Active Story:** STORY-041 — Python optimization API (`POST /api/optimize`)
+**Last Completed:** STORY-040 — asset_historical_data table + yfinance UPSERT (2026-03-31)
+**Next Epic (planned):** EPIC-10 — Multi-Platform Execution (v2.0)
 
 Update this section manually as stories are completed. Format:
 ```

@@ -30,6 +30,7 @@
 | Phase 7 | EPIC-08 PWA & Polish                    | ✅ Complete    | 2026-03-29 | 2026-03-30 |
 | Phase 8 | EPIC-09 AI Research Hub (v2.0)          | 🟡 In Progress | 2026-03-30 | —         |
 | Phase 9 | EPIC-10 Multi-Platform Execution (v2.0) | ⬜ Planned     | —         | —         |
+| Phase 10 | EPIC-11 Portfolio Projection & Optimization (v2.0) | ⬜ Planned | — | — |
 
 ---
 
@@ -147,6 +148,17 @@
 | STORY-037 | Webull automated order execution                                   | ⬜     | —        |
 | STORY-038 | Execution result UI — remove MANUAL badge for automated platforms | ⬜     | —        |
 | STORY-039 | Settings — remove manual-only notices for automated platforms     | ⬜     | —        |
+
+---
+
+## EPIC-11 — Portfolio Projection & Optimization (Phase 10 — v2.0)
+
+| Story     | Title                                               | Status | Completed |
+| --------- | --------------------------------------------------- | ------ | --------- |
+| STORY-040 | `asset_historical_data` table + yfinance UPSERT   | ✅     | 2026-03-31 |
+| STORY-041 | Python optimization API (`POST /api/optimize`)     | ⬜     | —        |
+| STORY-042 | SimulateScenariosButton + constraint logic         | ⬜     | —        |
+| STORY-043 | SimulationResultsTable + Apply Weights wiring      | ⬜     | —        |
 
 ---
 
