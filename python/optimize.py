@@ -1,5 +1,5 @@
 """
-api/optimize.py
+python/optimize.py
 Python serverless function for portfolio mean-variance optimization.
 Runtime: @vercel/python (configured in vercel.json)
 

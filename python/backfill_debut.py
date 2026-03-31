@@ -1,5 +1,5 @@
 """
-api/backfill_debut.py
+python/backfill_debut.py
 Python serverless function (Vercel) for backfilling assets.market_debut_date.
 
 Runtime: @vercel/python
