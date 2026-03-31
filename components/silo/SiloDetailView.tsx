@@ -17,6 +17,7 @@ import type { HoldingsResponse } from '@/lib/types/holdings'
 import { formatNumber } from '@/lib/formatNumber'
 import type { SimulationResult } from '@/lib/types/simulation'
 import { SimulateScenariosButton } from '@/components/simulation/SimulateScenariosButton'
+import { SimulationResultsTable } from '@/components/simulation/SimulationResultsTable'
 
 interface SiloData {
   id: string
@@ -156,6 +157,21 @@ export function SiloDetailView({ silo }: Props) {
     lastSimulatedKey.current = currentKey
   }
 
+  // F11-R11: Apply Weights — converts ticker-keyed weights to asset_id-keyed localWeights
+  // No API call — user must save manually via "Save weights"
+  function handleApplyWeights(weights: Record<string, number>) {
+    if (!data) return
+    const newWeights: Record<string, string> = {}
+    for (const holding of data.holdings) {
+      const tickerWeight = weights[holding.ticker]
+      if (tickerWeight !== undefined) {
+        newWeights[holding.asset_id] = formatNumber(tickerWeight * 100, 'weight-input')
+      }
+    }
+    setLocalWeights(prev => ({ ...prev, ...newWeights }))
+    toast.success('Weights pre-filled — review and click "Save weights" to persist.')
+  }
+
   const isManual = silo.platform_type === 'manual'
   const driftThreshold = data?.drift_threshold ?? silo.drift_threshold
 
@@ -215,6 +231,15 @@ export function SiloDetailView({ silo }: Props) {
               holdings={data.holdings}
               onSimulate={handleSimulate}
               isLoading={isSimulating}
+            />
+          )}
+
+          {/* Simulation results — visible after simulation succeeds (STORY-043) */}
+          {simulationResult && (
+            <SimulationResultsTable
+              result={simulationResult}
+              holdings={data.holdings}
+              onApplyWeights={handleApplyWeights}
             />
           )}
         </>

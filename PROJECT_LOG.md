@@ -39,6 +39,31 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-043 — SimulationResultsTable + Apply Weights Wiring
+**Completed:** 2026-03-31
+**Effort:** 0.5 day (estimated 1.5d)
+
+**What was built:**
+- `components/simulation/SimulationDisclaimer.tsx` — non-collapsible amber disclaimer banner (F11-R12)
+- `components/simulation/TruncationWarning.tsx` — amber alert, only when lookback_months < 36 (F11-R8)
+- `components/simulation/StrategyCard.tsx` — one row: name, weights "AAPL: 40.0%, TSLA: 60.0%", return/range, Apply button (F11-R10)
+- `components/simulation/SimulationResultsTable.tsx` — assembles disclaimer → truncation → 3 cards (F11-R10)
+- `components/simulation/TruncationWarning.test.tsx` — 6 tests: renders only < 36 months
+- `components/simulation/StrategyCard.test.tsx` — 10 tests: name, weights format, Apply button
+- `components/simulation/SimulationResultsTable.test.tsx` — 9 tests: card count, truncation, disclaimer, no API
+- `components/silo/SiloDetailView.tsx` — wired `SimulationResultsTable` below SimulateScenariosButton; `handleApplyWeights` converts ticker→asset_id weights and calls `setLocalWeights` (zero API calls) (F11-R11)
+
+**Decisions made:**
+- StrategyCard `onApply` typed as `(event?: React.MouseEvent) => void` — shadcn Button forwards the React MouseEvent to onClick
+- Used `userEvent.click` (not `fireEvent.click`) in tests — matches real browser behavior and doesn't pass MouseEvent to onClick
+- Weights format: "AAPL: 40.0%, TSLA: 60.0%" monospace — ticker: WW.W% comma-separated
+
+**Discovered issues / carry-over notes:**
+- EPIC-11 (Portfolio Projection & Optimization) is now complete — all 4 stories done
+- EPIC-10 (Multi-Platform Execution v2.0) stories are all deferred — next epic to resume when unblocked
+
+**Quality gates passed:** type-check ✅ | test 562/562 ✅ | build ✅
+
 ### STORY-042 — SimulateScenariosButton & Constraint Logic
 **Completed:** 2026-03-31
 **Effort:** 0.5 day (estimated 1.5d)
