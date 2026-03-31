@@ -39,6 +39,32 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### STORY-042 — SimulateScenariosButton & Constraint Logic
+**Completed:** 2026-03-31
+**Effort:** 0.5 day (estimated 1.5d)
+
+**What was built:**
+- `hooks/useSimulationConstraints.ts` — pure constraint logic: assetCount ≥ 2, minAgeMet ≥ 3 months, isDisabled, disableReason
+- `hooks/useSimulationConstraints.test.ts` — 8 TDD tests: all constraint combinations
+- `components/simulation/SimulateScenariosButton.tsx` — primary button with BarChart3 icon, disabled/loading states, title tooltip
+- `components/simulation/SimulateScenariosButton.test.tsx` — 7 component tests: disabled states, loading, click behavior
+- `lib/types/simulation.ts` — `SimulationResult` type (shared with STORY-043)
+- `components/silo/SiloDetailView.tsx` — added `simulationResult` state, `lastSimulatedKey` ref, `runSimulation` mutation, `handleSimulate` with deduplication, renders `SimulateScenariosButton` below holdings table
+- `lib/types/holdings.ts` — added `asset_created_at?: string` to `Holding` interface
+- `app/api/silos/[silo_id]/holdings/route.ts` — added `assets.created_at` to SELECT join for button age check
+
+**Decisions made:**
+- Used `assets.created_at` as proxy for trading history (per STORY-042 spec) — no new API calls needed for age check
+- State lifted to `SiloDetailView` level (`simulationResult`) so STORY-043 can access and clear results
+- Used `useMutation` + `fetch` directly (not `startTransition`) for the API call — per STORY-042 spec
+
+**Discovered issues / carry-over notes:**
+- STORY-043 (`SimulationResultsTable`) will render `simulationResult` when non-null and wire "Apply Weights" to pre-fill target weights
+
+**Quality gates passed:** type-check ✅ | test 537/537 ✅ | build ✅
+
+---
+
 ### STORY-041 — Python Optimization API (`POST /api/optimize`)
 **Completed:** 2026-03-31
 **Effort:** 0.5 day (estimated 2d)

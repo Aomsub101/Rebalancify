@@ -30,10 +30,11 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Silo not found' } }, { status: 404 })
   }
 
-  // 2. Fetch holdings with assets joined (include price_source for on-demand price fetching)
+  // 2. Fetch holdings with assets joined (include price_source for on-demand price fetching;
+  //     also include created_at for simulation button age check — STORY-042)
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type, price_source)')
+    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type, price_source, created_at)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -100,7 +101,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Compute per-holding derived values
   const now = Date.now()
   const holdings = rows.map(h => {
-    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string }
+    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; created_at?: string }
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
     const qty = new Decimal(h.quantity as string)
     const currentValue = qty.mul(price)
@@ -129,6 +130,8 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       source: h.source,
       stale_days: staleDays,
       last_updated_at: h.last_updated_at,
+      // Used by SimulateScenariosButton age check (STORY-042 / F11-R1)
+      asset_created_at: asset.created_at,
     }
   })
 

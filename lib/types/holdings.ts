@@ -15,6 +15,8 @@ export interface Holding {
   source: string
   stale_days: number
   last_updated_at: string
+  /** When the asset was first mapped into any silo (used for trading-history age check) */
+  asset_created_at?: string
 }
 
 export interface HoldingsResponse {

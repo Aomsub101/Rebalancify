@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GET, POST } from '../route'
 import { NextRequest } from 'next/server'
 
+// ── Helpers for chaining Supabase mock returns ────────────────────────────────
+
 const mockGetUser = vi.fn()
 const mockFrom = vi.fn()
 
@@ -253,5 +255,143 @@ describe('POST /api/silos/[silo_id]/holdings', () => {
 
     const upsertArg = upsertFn.mock.calls[0][0]
     expect(upsertArg).not.toHaveProperty('price')
+  })
+})
+
+// ── GET /api/silos/[silo_id]/holdings — Platform isolation ─────────────────────
+
+/**
+ * Platform isolation is enforced in the GET handler:
+ *   - API silos (alpaca, bitkub, innovestx, schwab, webull): only return holdings
+ *     where source = '${platform_type}_sync'
+ *   - Manual silos: return ALL holdings regardless of source
+ *
+ * This prevents holdings from one broker bleeding into another's silo view.
+ * See: app/api/silos/[silo_id]/holdings/route.ts lines 45-50.
+ */
+
+describe('GET /api/silos/[silo_id]/holdings — Platform isolation', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('returns 401 when unauthenticated', async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: null })
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`)
+    const res = await GET(req, makeParams())
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 404 when silo not found', async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null })
+    mockFrom.mockReturnValueOnce(makeSiloMock(null))
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`)
+    const res = await GET(req, makeParams())
+    expect(res.status).toBe(404)
+  })
+
+  it('filters holdings by source for API silos — Alpaca silo only returns alpaca_sync holdings', async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null })
+
+    const alpacaHolding = {
+      id: 'h-alpaca',
+      asset_id: 'asset-alpaca',
+      quantity: '10.00000000',
+      source: 'alpaca_sync',
+      last_updated_at: new Date().toISOString(),
+      assets: { ticker: 'TSLA', name: 'Tesla Inc.', asset_type: 'stock' },
+    }
+    const manualHolding = {
+      id: 'h-manual',
+      asset_id: 'asset-manual',
+      quantity: '5.00000000',
+      source: 'manual',
+      last_updated_at: new Date().toISOString(),
+      assets: { ticker: 'AAPL', name: 'Apple Inc.', asset_type: 'stock' },
+    }
+    // DB contains BOTH an Alpaca-sourced and a manual holding for the same silo
+    const allHoldings = [alpacaHolding, manualHolding]
+    const priceData = [
+      { asset_id: 'asset-alpaca', price: '250.00000000', currency: 'USD' },
+      { asset_id: 'asset-manual', price: '185.00000000', currency: 'USD' },
+    ]
+    const weightData = [
+      { asset_id: 'asset-alpaca', weight_pct: 50 },
+      { asset_id: 'asset-manual', weight_pct: 50 },
+    ]
+
+    // platform_type='alpaca' triggers source filtering in GET handler
+    mockFrom
+      .mockReturnValueOnce(makeSiloMock({ id: SILO_ID, platform_type: 'alpaca', drift_threshold: 5 }))
+      .mockReturnValueOnce(makeHoldingsMock(allHoldings))
+      .mockReturnValueOnce(makePriceMock(priceData))
+      .mockReturnValueOnce(makeTargetWeightsMock(weightData))
+
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`)
+    const res = await GET(req, makeParams())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // Platform isolation enforced: only alpaca_sync holdings returned
+    expect(body.holdings).toHaveLength(1)
+    expect(body.holdings[0].source).toBe('alpaca_sync')
+    expect(body.holdings[0].ticker).toBe('TSLA')
+    // Manual holding (AAPL) must NOT appear in Alpaca silo
+    expect(body.holdings.some((h: { ticker: string }) => h.ticker === 'AAPL')).toBe(false)
+  })
+
+  it('returns ALL holdings for manual silos — no source filtering', async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: { id: USER_ID } }, error: null })
+
+    const alpacaHolding = {
+      id: 'h-alpaca',
+      asset_id: 'asset-alpaca',
+      quantity: '10.00000000',
+      source: 'alpaca_sync',
+      last_updated_at: new Date().toISOString(),
+      assets: { ticker: 'TSLA', name: 'Tesla Inc.', asset_type: 'stock' },
+    }
+    const manualHolding = {
+      id: 'h-manual',
+      asset_id: 'asset-manual',
+      quantity: '5.00000000',
+      source: 'manual',
+      last_updated_at: new Date().toISOString(),
+      assets: { ticker: 'AAPL', name: 'Apple Inc.', asset_type: 'stock' },
+    }
+    const bitkubHolding = {
+      id: 'h-bitkub',
+      asset_id: 'asset-bitkub',
+      quantity: '0.50000000',
+      source: 'bitkub_sync',
+      last_updated_at: new Date().toISOString(),
+      assets: { ticker: 'BTC', name: 'Bitcoin', asset_type: 'crypto' },
+    }
+    const allHoldings = [alpacaHolding, manualHolding, bitkubHolding]
+    const priceData = [
+      { asset_id: 'asset-alpaca', price: '250.00000000', currency: 'USD' },
+      { asset_id: 'asset-manual', price: '185.00000000', currency: 'USD' },
+      { asset_id: 'asset-bitkub', price: '60000.00000000', currency: 'THB' },
+    ]
+    const weightData = [
+      { asset_id: 'asset-alpaca', weight_pct: 40 },
+      { asset_id: 'asset-manual', weight_pct: 30 },
+      { asset_id: 'asset-bitkub', weight_pct: 30 },
+    ]
+
+    // platform_type='manual' → no source filtering in GET handler
+    mockFrom
+      .mockReturnValueOnce(makeSiloMock({ id: SILO_ID, platform_type: 'manual', drift_threshold: 5 }))
+      .mockReturnValueOnce(makeHoldingsMock(allHoldings))
+      .mockReturnValueOnce(makePriceMock(priceData))
+      .mockReturnValueOnce(makeTargetWeightsMock(weightData))
+
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/holdings`)
+    const res = await GET(req, makeParams())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // Manual silo: no source filtering — all sources returned
+    expect(body.holdings).toHaveLength(3)
+    const sources = body.holdings.map((h: { source: string }) => h.source)
+    expect(sources).toContain('alpaca_sync')
+    expect(sources).toContain('manual')
+    expect(sources).toContain('bitkub_sync')
   })
 })

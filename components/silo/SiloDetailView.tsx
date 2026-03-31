@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Save } from 'lucide-react'
@@ -15,6 +15,8 @@ import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { useDirtyGuard } from '@/hooks/useDirtyGuard'
 import type { HoldingsResponse } from '@/lib/types/holdings'
 import { formatNumber } from '@/lib/formatNumber'
+import type { SimulationResult } from '@/lib/types/simulation'
+import { SimulateScenariosButton } from '@/components/simulation/SimulateScenariosButton'
 
 interface SiloData {
   id: string
@@ -32,6 +34,9 @@ interface Props {
 
 export function SiloDetailView({ silo }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
+  // Deduplication key — sorted comma-separated tickers of the last simulated composition
+  const lastSimulatedKey = useRef<string>('')
   const queryClient = useQueryClient()
 
   // ── Holdings fetch ──────────────────────────────────────────────────────────
@@ -111,6 +116,46 @@ export function SiloDetailView({ silo }: Props) {
     },
   })
 
+  // ── Simulation mutation (STORY-042 / F11-R1, R13) ─────────────────────────
+  const { mutate: runSimulation, isPending: isSimulating } = useMutation({
+    mutationFn: async (tickers: string[]) => {
+      const res = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(json?.error?.message ?? 'Simulation failed')
+      }
+      return json as SimulationResult
+    },
+    onSuccess: (data) => {
+      setSimulationResult(data)
+      toast.success('Simulation complete.')
+    },
+    onError: (err: Error) => {
+      toast.error(err.message ?? 'Simulation failed')
+    },
+  })
+
+  // Deduplication helper: sorted comma-separated ticker key
+  function getTickerKey(holdings: HoldingsResponse['holdings']) {
+    return [...holdings].map(h => h.ticker).sort().join(',')
+  }
+
+  function handleSimulate() {
+    if (!data) return
+    const currentKey = getTickerKey(data.holdings)
+    if (currentKey === lastSimulatedKey.current) {
+      toast('Asset composition hasn\'t changed since last simulation.')
+      return
+    }
+    const tickers = data.holdings.map(h => h.ticker)
+    runSimulation(tickers)
+    lastSimulatedKey.current = currentKey
+  }
+
   const isManual = silo.platform_type === 'manual'
   const driftThreshold = data?.drift_threshold ?? silo.drift_threshold
 
@@ -161,6 +206,15 @@ export function SiloDetailView({ silo }: Props) {
               localWeights={localWeights}
               onWeightChange={handleWeightChange}
               cashTargetPct={cashTargetPct}
+            />
+          )}
+
+          {/* Simulate Scenarios button — visible when there are holdings (STORY-042) */}
+          {data.holdings.length > 0 && (
+            <SimulateScenariosButton
+              holdings={data.holdings}
+              onSimulate={handleSimulate}
+              isLoading={isSimulating}
             />
           )}
         </>

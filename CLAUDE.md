@@ -141,8 +141,8 @@ These rules are absolute. Violating any of them is a bug, not a style preference
 ## 5. Current Build Phase
 
 **Active Epic:** EPIC-11 — Portfolio Projection & Optimization (v2.0)
-**Active Story:** STORY-042 — SimulateScenariosButton + constraint logic
-**Last Completed:** STORY-041 — Python optimization API (`POST /api/optimize`) (2026-03-31)
+**Active Story:** STORY-043 — SimulationResultsTable + Apply Weights wiring
+**Last Completed:** STORY-042 — SimulateScenariosButton + constraint logic (2026-03-31)
 **Next Epic (planned):** EPIC-10 — Multi-Platform Execution (v2.0)
 
 Update this section manually as stories are completed. Format:
