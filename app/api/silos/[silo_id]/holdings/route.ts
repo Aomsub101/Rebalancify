@@ -137,6 +137,39 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     }
   })
 
+  // Backfill market_debut_date for any asset that doesn't have it yet.
+  // This fires yfinance to get the 5yr price series and records the earliest date —
+  // same logic as api/optimize.py. Only touches tickers that are actually in this silo
+  // and only fires for assets with NULL market_debut_date (no-op if already set).
+  const nullDebutHoldings = holdings.filter(h => h.market_debut_date === null)
+  if (nullDebutHoldings.length > 0) {
+    // Deduplicate by ticker — one backfill call per unique ticker
+    const tickerSet = new Set(nullDebutHoldings.map(h => h.ticker))
+    const backfillPromises = Array.from(tickerSet).map(async ticker => {
+      try {
+        const res = await fetch(`${request.nextUrl.origin}/api/backfill_debut`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker }),
+        })
+        if (!res.ok) return { ticker, market_debut_date: null }
+        const data = await res.json()
+        return { ticker, market_debut_date: data.market_debut_date ?? null }
+      } catch {
+        return { ticker, market_debut_date: null }
+      }
+    })
+    const results = await Promise.all(backfillPromises)
+    const backfillMap = new Map(results.map(r => [r.ticker, r.market_debut_date]))
+    // Mutate the holdings in-place so the response includes the freshly-backfilled dates
+    // and the UI can enable the Simulate button without a page reload.
+    for (const h of holdings) {
+      if (h.market_debut_date === null && backfillMap.has(h.ticker)) {
+        h.market_debut_date = backfillMap.get(h.ticker) ?? null
+      }
+    }
+  }
+
   return NextResponse.json({
     drift_threshold: Number(silo.drift_threshold),
     cash_balance: cashBalance.toFixed(8),
