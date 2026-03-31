@@ -147,7 +147,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     const tickerSet = new Set(nullDebutHoldings.map(h => h.ticker))
     const backfillPromises = Array.from(tickerSet).map(async ticker => {
       try {
-        const res = await fetch(`${request.nextUrl.origin}/api/backfill_debut`, {
+        const res = await fetch(`${_request.nextUrl.origin}/api/backfill_debut`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticker }),
