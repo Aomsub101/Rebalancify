@@ -30,10 +30,10 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Silo not found' } }, { status: 404 })
   }
 
-  // 2. Fetch holdings with assets joined
+  // 2. Fetch holdings with assets joined (include price_source for on-demand price fetching)
   const { data: holdingsData, error: holdingsError } = await supabase
     .from('holdings')
-    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type)')
+    .select('id, asset_id, quantity, source, last_updated_at, assets(ticker, name, asset_type, price_source)')
     .eq('silo_id', silo_id)
 
   if (holdingsError) {
@@ -66,6 +66,27 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // Build lookup maps
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
+
+  // On-demand price fetch for uncached assets — prevents $0.00 values when sync failed to cache
+  // (non-fatal: missing prices default to 0, same as before, but now we attempt to fill the gap)
+  const uncachedIds = rows.map(h => h.asset_id).filter(id => !priceMap.has(id) || priceMap.get(id) === '0')
+  for (const assetId of uncachedIds) {
+    const h = rows.find(r => r.asset_id === assetId)
+    if (!h) continue
+    const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; price_source: string }
+    try {
+      const priceSource = (asset.price_source ?? 'finnhub') as 'finnhub' | 'coingecko' | 'alpaca' | 'bitkub'
+      const result = await fetchPrice(supabase, assetId, asset.ticker, priceSource)
+      priceMap.set(assetId, result.price)
+      // Persist so subsequent requests hit the cache
+      await supabase.from('price_cache').upsert(
+        { asset_id: assetId, price: result.price, currency: result.currency ?? 'USD', source: result.source },
+        { onConflict: 'asset_id' },
+      )
+    } catch {
+      // non-fatal — price remains 0
+    }
+  }
 
   // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
   // cash_balance now comes from the silos table (post-migration 23), not per-holding sums
