@@ -111,8 +111,8 @@ export function Sidebar() {
                 isDirtyIndicator
                   ? 'bg-amber-500/20 text-amber-400'
                   : isActive
-                    ? 'bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)]'
-                    : 'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]',
+                    ? 'bg-slate-800/50 text-white'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white',
               )}
               aria-current={isActive ? 'page' : undefined}
             >
