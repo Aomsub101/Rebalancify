@@ -193,8 +193,10 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   for (const pos of positions) {
     const assetType = pos.asset_class === 'crypto' ? 'crypto' : 'stock'
-    // Price source: stocks → Finnhub, crypto → CoinGecko (Alpaca has no public price API)
-    const priceSource = assetType === 'crypto' ? 'coingecko' : 'finnhub'
+    // Price source is always 'alpaca' for assets synced from Alpaca — this ensures
+    // Alpaca holdings are isolated to Alpaca-sourced assets and never fall back to
+    // Finnhub or CoinGecko assets that may have the same ticker.
+    const priceSource = 'alpaca'
 
     // Find or create the asset record (unique on ticker + price_source)
     const { data: existingAsset } = await supabase
