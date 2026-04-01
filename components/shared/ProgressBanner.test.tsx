@@ -7,8 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProgressBanner } from './ProgressBanner'
 
 const mockRefreshProfile = vi.fn()
-vi.mock('@/contexts/SessionContext', () => ({
-  useSession: () => ({
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
     session: { user: { id: 'user-1' } },
     refreshProfile: mockRefreshProfile,
   }),

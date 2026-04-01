@@ -3,7 +3,8 @@
 import { usePathname } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bell, DollarSign } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useUI } from '@/contexts/UIContext'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { cn } from '@/lib/utils'
 
@@ -47,7 +48,8 @@ function getPageTitle(pathname: string): string {
 export function TopBar() {
   const pathname = usePathname()
   const pageTitle = getPageTitle(pathname)
-  const { session, showUSD, setShowUSD } = useSession()
+  const { session } = useAuth()
+  const { showUSD, setShowUSD } = useUI()
   const queryClient = useQueryClient()
   const isOverview = pathname.startsWith('/overview')
 

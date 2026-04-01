@@ -12,7 +12,7 @@
 import { useState } from 'react'
 import { X, CheckCircle2, Circle, AlertCircle } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface SiloResponse {
   id: string
@@ -47,7 +47,7 @@ async function fetchHistory(siloId: string): Promise<RebalanceSession[]> {
 }
 
 export function ProgressBanner() {
-  const { session, refreshProfile } = useSession()
+  const { session, refreshProfile } = useAuth()
   const [isDismissing, setIsDismissing] = useState(false)
 
   // AC-9: reactive — uses the cached silos query

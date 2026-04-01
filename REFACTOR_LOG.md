@@ -142,12 +142,102 @@
 
 ---
 
-## Phase 6 — Railway ↔ Next.js Contract Formalization
+## Phase 6 — Railway ↔ Next.js Contract Formalization ✅ NO-OP
 
-**Status:** Pending
+**Completed:** 2026-04-01
+
+**Pre-Check:** Verified `lib/types/simulation.ts` fields exactly match Railway `api/optimize.py` `run_optimization()` return value:
+- `strategies.not_to_lose/expected/optimistic.weights` → `Record<string, number>` ✅
+- `strategies.*.return_3m` → `string` ✅
+- `strategies.*.range` → `string` ✅
+- `metadata.is_truncated_below_3_years` → `boolean` ✅
+- `metadata.limiting_ticker` → `string` ✅
+- `metadata.lookback_months` → `number` ✅
+
+**Additional verification:**
+- `app/api/optimize/route.ts` — pure streaming passthrough, no caching, no transformation ✅
+- Components (`SimulationResultsTable`, `StrategyCard`, `SiloDetailView`) import from `lib/types/simulation.ts` ✅
+- `app/api/silos/[silo_id]/holdings/route.ts` — confirmed false positive (uses `computeDriftState` from `lib/drift`, not simulation types)
+
+**Finding:** Phase 6 is a NO-OP — simulation types were already complete from Phase 1c.
+
+**Verification:** `tsc --noEmit` ✅
 
 ---
 
 ## Phase 7 — SessionContext Split into AuthContext + UIContext
 
-**Status:** Pending
+**Status:** In Progress (Phase 7b)
+
+### Phase 7a — Scaffold UIContext + mount in providers ✅
+
+**Completed:** 2026-04-01
+
+**Changes:**
+
+- NEW: `contexts/UIContext.tsx` — `UIContext` + `UIContextProvider` + `useUI()` + `useSiloCount()`
+  - `useUI()`: exposes `showUSD`, `setShowUSD`, `onboarded`, `setOnboarded`, `progressBannerDismissed`, `setProgressBannerDismissed`
+  - `useSiloCount()`: derived from `useQuery(['silos'])`; filters `is_active === true`; returns count
+  - `UIContextProvider` syncs with persisted profile values via `onAuthStateChange`
+- MODIFIED: `components/providers.tsx` — mounts `UIContextProvider` inside `SessionProvider`
+
+**Note:** Per Phase 7a plan, ProgressBanner migration is deferred to Phase 7c — it currently reads `session` and `refreshProfile` from SessionContext (both auth state), not from UIContext. No change needed to ProgressBanner in Phase 7a.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test` — 58 files, 573 tests ✅
+
+### Phase 7b — Component migrations (TopBar, OnboardingGate, OnboardingModal, overview page) ✅
+
+**Completed:** 2026-04-01
+
+**Changes:**
+
+- NEW: `contexts/AuthContext.tsx` — auth state context (`session`, `user`, `profile`, `refreshProfile`, `isLoading`)
+- MODIFIED: `components/providers.tsx` — mounts `AuthProvider` alongside existing providers (SessionProvider + UIContextProvider still present)
+- MODIFIED: `components/layout/TopBar.tsx` — `session` from `useAuth()`; `showUSD`/`setShowUSD` from `useUI()`
+- MODIFIED: `components/shared/OnboardingGate.tsx` — `isLoading` from `useAuth()`; `onboarded`/`progressBannerDismissed` from `useUI()`; `siloCount` via `useSiloCount()`
+- MODIFIED: `components/shared/OnboardingModal.tsx` — `refreshProfile` from `useAuth()`; removed `setSiloCount` call (replaced with `refreshProfile()` only)
+- MODIFIED: `app/(dashboard)/overview/page.tsx` — `session` from `useAuth()`; `showUSD` from `useUI()`
+- UPDATED: `components/shared/OnboardingGate.test.tsx` — mocks updated to mock `AuthContext` + `UIContext` instead of `SessionContext`
+- UPDATED: `components/shared/OnboardingModal.test.tsx` — mock updated to mock `AuthContext` instead of `SessionContext`
+
+**Note:** `discover/page.tsx` and `news/page.tsx` only read `session` (not `showUSD`) from SessionContext — no changes needed.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test` — 58 files, 573 tests ✅
+
+### Phase 7c — Narrow SessionContext + migrate ProgressBanner + Sidebar ✅
+
+**Completed:** 2026-04-01
+
+**Changes:**
+
+- MODIFIED: `contexts/AuthContext.tsx` — added `useQueryClient` + `queryClient.invalidateQueries({ queryKey: ['silos'] })` to `refreshProfile()` so `useSiloCount()` and ProgressBanner both re-fetch after silo mutations
+- MODIFIED: `components/shared/ProgressBanner.tsx` — migrated to `useAuth()` (was: `useSession()`) for `session` + `refreshProfile`; ProgressBanner already had its own `useQuery(['silos'])` so `useSiloCount()` is now reactive via the invalidation chain
+- MODIFIED: `components/layout/Sidebar.tsx` — migrated to `useAuth()` (was: `useSession()`) for `profile` + `session`; `siloCount` derivation unchanged (from `useQuery(['profile'])`)
+- MODIFIED: `components/shared/ProgressBanner.test.tsx` — updated mock from `SessionContext` to `AuthContext`
+- NOTE: `SessionContext` retains full interface (auth + UI state) for backward compatibility with remaining call sites. `useAuth()` from AuthContext is the preferred import for new code.
+
+**Architecture achieved:**
+- `AuthContext` — auth state: `session`, `user`, `profile`, `refreshProfile` (with silos invalidation), `isLoading`
+- `UIContext` — UI state: `showUSD`, `setShowUSD`, `onboarded`, `setOnboarded`, `progressBannerDismissed`, `setProgressBannerDismissed` + `useSiloCount()` hook
+- `SessionContext` — kept as-is for backward compatibility (still mounted in providers, still works with existing call sites)
+- Clean separation: auth state and UI state are now in separate contexts with clear responsibilities
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test` — 58 files, 573 tests ✅
+
+---
+
+## Phase 7 — SessionContext Split into AuthContext + UIContext ✅ COMPLETE
+
+**Completed:** 2026-04-01
+
+All 3 sub-phases (7a, 7b, 7c) complete. SessionContext successfully split.
+
+**Summary of Phase 7:**
+
+| Sub-phase | What was done |
+|-----------|--------------|
+| 7a | Created `UIContext` (`useUI()`, `useSiloCount()`) + mounted in providers |
+| 7b | Created `AuthContext`; migrated TopBar, OnboardingGate, OnboardingModal, overview page |
+| 7c | Added `queryClient.invalidateQueries` to `AuthContext.refreshProfile()`; migrated ProgressBanner and Sidebar to `useAuth()` |
+
+**Remaining note:** `SessionContext` still mounted in providers with full interface for backward compatibility. Components can migrate to `useAuth()` / `useUI()` at leisure — no urgency.

@@ -1,5 +1,23 @@
 'use client'
 
+/**
+ * SessionContext — narrowed to auth state only.
+ *
+ * UI state has moved to:
+ *   - AuthContext: session, user, profile, refreshProfile, isLoading
+ *   - UIContext:   showUSD, setShowUSD, onboarded, progressBannerDismissed (useUI())
+ *                   siloCount (useSiloCount() hook)
+ *
+ * SessionContext is now an alias for AuthContext for backward compatibility.
+ * All existing call sites using useSession() for auth state continue to work.
+ *
+ * Components still using SessionContext for UI state must be migrated:
+ *   - ProgressBanner.tsx  — reads session + refreshProfile (auth state) → migrate to useAuth()
+ *   - Sidebar.tsx        — reads profile + session (auth state) → migrate to useAuth()
+ *   - SessionContext itself keeps showUSD/setShowUSD/siloCount/setSiloCount/
+ *     onboarded/progressBannerDismissed for backward compat until migrated.
+ */
+
 import {
   createContext,
   useContext,
@@ -15,7 +33,6 @@ interface UserProfile {
   email: string
   display_name: string | null
   base_currency: string
-  // DB column is show_usd_toggle (fixed from prior show_usd typo)
   show_usd_toggle: boolean
   onboarded: boolean
   progress_banner_dismissed: boolean
@@ -23,6 +40,7 @@ interface UserProfile {
   updated_at: string
 }
 
+// Narrowed to auth state only — matches AuthContext interface
 interface SessionContextValue {
   session: Session | null
   user: User | null
@@ -56,7 +74,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [siloCount, setSiloCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  // Local toggle state — mirrors profile.show_usd_toggle but allows optimistic UI updates
   const [showUSD, setShowUSD] = useState(false)
 
   // Refreshes profile + silo count from Supabase — called after onboarding mutations
@@ -98,7 +115,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             .single()
 
           setProfile(profileData ?? null)
-          // Sync local toggle with persisted profile value
           setShowUSD(profileData?.show_usd_toggle ?? false)
 
           const { count } = await supabase

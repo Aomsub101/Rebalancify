@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 // AC-3: exact payload per platform
 interface PlatformConfig {
@@ -45,7 +45,7 @@ interface Props {
 
 export function OnboardingModal({ open }: Props) {
   const router = useRouter()
-  const { refreshProfile, setSiloCount } = useSession()
+  const { refreshProfile } = useAuth()
 
   const [selected, setSelected] = useState<PlatformConfig | null>(null)
   // "Other" state
@@ -104,8 +104,7 @@ export function OnboardingModal({ open }: Props) {
         body: JSON.stringify({ onboarded: true }),
       })
 
-      // Update SessionContext so modal disappears and banner can appear
-      setSiloCount(1)
+      // Refresh profile + invalidate silos query so useSiloCount() updates
       await refreshProfile()
 
       // AC-4: navigate to the new silo

@@ -8,12 +8,15 @@
  */
 'use client'
 
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useUI, useSiloCount } from '@/contexts/UIContext'
 import { OnboardingModal } from '@/components/shared/OnboardingModal'
 import { ProgressBanner } from '@/components/shared/ProgressBanner'
 
 export function OnboardingGate() {
-  const { onboarded, siloCount, progressBannerDismissed, isLoading } = useSession()
+  const { isLoading } = useAuth()
+  const { onboarded, progressBannerDismissed } = useUI()
+  const siloCount = useSiloCount()
 
   // Don't render anything while auth is still resolving
   if (isLoading) return null

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { cn } from '@/lib/utils'
@@ -38,7 +38,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { profile: sessionProfile, session } = useSession()
+  const { profile, session } = useAuth()
   const { isDirty, confirmNavigation } = useDirtyState()
 
   // AC #11: useQuery so silo count updates reactively after create/delete invalidations
@@ -50,7 +50,7 @@ export function Sidebar() {
 
   const siloCount = profileData?.active_silo_count ?? 0
   // Use display_name from API if available, otherwise fall back to session profile
-  const displayName = profileData?.display_name ?? sessionProfile?.display_name ?? null
+  const displayName = profileData?.display_name ?? profile?.display_name ?? null
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -157,7 +157,7 @@ export function Sidebar() {
             {/* Name + sign-out — desktop only */}
             <div className="hidden lg:flex lg:flex-col lg:flex-1 min-w-0">
               <span className="text-[var(--sidebar-foreground)] text-sm font-medium truncate">
-                {displayName ?? sessionProfile?.email ?? '—'}
+                {displayName ?? profile?.email ?? '—'}
               </span>
               <button
                 onClick={handleSignOut}

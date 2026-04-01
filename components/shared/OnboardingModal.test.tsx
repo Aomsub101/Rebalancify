@@ -12,11 +12,9 @@ vi.mock('next/navigation', () => ({
 }))
 
 const mockRefreshProfile = vi.fn()
-const mockSetSiloCount = vi.fn()
-vi.mock('@/contexts/SessionContext', () => ({
-  useSession: () => ({
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
     refreshProfile: mockRefreshProfile,
-    setSiloCount: mockSetSiloCount,
   }),
 }))
 

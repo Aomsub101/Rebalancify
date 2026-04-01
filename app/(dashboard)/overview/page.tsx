@@ -6,7 +6,8 @@
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { PlusCircle, PieChart } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useUI } from '@/contexts/UIContext'
 import { SiloCard, type SiloCardData } from '@/components/silo/SiloCard'
 import { PortfolioSummaryCard } from '@/components/overview/PortfolioSummaryCard'
 import type { DriftAsset } from '@/lib/types/portfolio'
@@ -52,7 +53,8 @@ async function fetchFxRates(): Promise<Record<string, FxRateEntry>> {
 
 export default function OverviewPage() {
   const router = useRouter()
-  const { session, showUSD } = useSession()
+  const { session } = useAuth()
+  const { showUSD } = useUI()
 
   // AC-3: fetch all active silos
   const {
