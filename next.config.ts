@@ -17,6 +17,32 @@ const baseConfig: NextConfig = {
     if (Array.isArray(config.externals)) {
       config.externals.push('@napi-rs/canvas')
     }
+
+    // Provide process.getBuiltinModule fallback for Node.js <22.
+    // pdfjs-dist 5.x (inside pdf-parse) calls process.getBuiltinModule("fs")
+    // which only exists in Node.js 22+. Without this fallback, webpack's
+    // module evaluation phase crashes on older Node runtimes (e.g. Railway's Node 20).
+    // The fallback uses module.createRequire so pdfjs-dist's Node.js code paths
+    // continue to work on older Node versions.
+    config.plugins.push({
+      apply(compiler: any) {
+        compiler.options.resolve.fallback = {
+          ...compiler.options.resolve.fallback,
+          module: false, // let Node.js module system work natively
+        }
+        // Patch process.getBuiltinModule before any module evaluation
+        if (typeof (process as any).getBuiltinModule === 'undefined') {
+          try {
+            const { createRequire } = require('module')
+            const _require = createRequire(__filename)
+            ;(process as any).getBuiltinModule = (id: string) => _require(id)
+          } catch {
+            // Fallback already set or module.createRequire unavailable
+          }
+        }
+      },
+    })
+
     return config
   },
 };
