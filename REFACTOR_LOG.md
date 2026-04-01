@@ -8,9 +8,11 @@
 ## Phase 1 — Shared Types & Orphan Code
 
 ### Phase 1a — Move `DriftAsset` to shared types ✅
+
 **Completed:** 2026-04-01
 
 **Changes:**
+
 - NEW: `lib/types/portfolio.ts` — canonical `DriftAsset` interface exported here
 - MODIFIED: `components/overview/PortfolioSummaryCard.tsx` — removed inline `DriftAsset`; added `import type { DriftAsset } from '@/lib/types/portfolio'`
 - MODIFIED: `components/silo/SiloCard.tsx` — updated import from `@/components/overview/PortfolioSummaryCard` → `@/lib/types/portfolio`
@@ -24,9 +26,11 @@
 ---
 
 ### Phase 1b — Orphaned `lib/priceHistory.ts` ✅
+
 **Completed:** 2026-04-01
 
 **Changes:**
+
 - MODIFIED: `lib/priceHistory.ts` — added `// TODO(STORY-044): activate this` comment
 
 **Pre-Check:** `grep -rn "priceHistory|fetchPriceHistory"` confirmed no import sites beyond `lib/priceHistory.ts` and `lib/priceHistory.test.ts` (self-references only). Per plan §Phase 1b: treated as future-use stub, not deleted.
@@ -36,9 +40,11 @@
 ---
 
 ### Phase 1c — Simulation Types Completeness ✅ NO-OP
+
 **Completed:** 2026-04-01
 
 **Pre-Check:** Verified `lib/types/simulation.ts` fields exactly match Railway `api/optimize.py` `run_optimization()` return value:
+
 - `strategies.not_to_lose/expected/optimistic` → `SimulationStrategy` ✅
 - `metadata.is_truncated_below_3_years` → `boolean` ✅
 - `metadata.limiting_ticker` → `string` ✅
@@ -51,9 +57,11 @@
 ---
 
 ## Phase 2 — Encryption Adapter Extraction ✅
+
 **Completed:** 2026-04-01
 
 **Changes:**
+
 - NEW: `lib/encryption/index.ts` — `IEncryption` interface + singleton re-export of `encrypt`/`decrypt` from adapter
 - NEW: `lib/encryption/adapter.ts` — AES-256-GCM implementation (moved from `lib/encryption.ts`; unchanged)
 - NEW: `lib/encryption/encryption.test.ts` — rewritten to import from `./adapter` (tests 3 required properties)
@@ -61,6 +69,7 @@
 - DELETED: `lib/encryption.test.ts` — replaced by `lib/encryption/encryption.test.ts`
 
 **Import sites verified (import path unchanged — all already used `@/lib/encryption`):**
+
 - `app/api/auth/schwab/callback/route.ts` — `{ encrypt }`
 - `app/api/profile/route.ts` — `{ encrypt }`
 - `app/api/research/[ticker]/route.ts` — `{ decrypt }`
@@ -76,10 +85,24 @@
 
 ---
 
+## Phase 3 — Eliminate Drift Logic Duplication ✅ NO-OP
+
+**Completed:** 2026-04-01
+
+**Pre-Check:** `grep -n "drift_state\|computeDriftState\|drift_pct.*green\|drift_pct.*yellow\|drift_pct.*red" app/api/cron/drift-digest/route.ts` — no matches
+
+**Finding:**`cron/drift-digest/route.ts` uses a binary breach check (`drift > silo.drift_threshold`) — it never implemented green/yellow/red classification because its purpose is breach detection for email digest, not three-state UI classification. `computeDriftState` lives correctly in `lib/drift.ts` and is used by `holdings/route.ts` and `drift/route.ts`. The duplication noted in B-2 never existed in this form.
+
+**Verification:**`tsc --noEmit` ✅ | `pnpm test lib/drift.test.ts` — 9 tests ✅
+
+---
+
 ## Phase 4 — Top-Movers Service Extraction ✅
+
 **Completed:** 2026-04-01
 
 **Changes:**
+
 - NEW: `lib/topMoversService.ts` — extracted service (FMP, Finnhub, CoinGecko, stale-cache helpers); `fetchTopMovers(type)` returns `null` on all-source failure; stale-cache handled by caller
 - NEW: `lib/topMoversService.test.ts` — 8 TDD tests: FMP→Finnhub fallback, Finnhub failure, all-sources-null, correct price/change_pct shape, CoinGecko success/failure
 - MODIFIED: `app/api/market/top-movers/route.ts` — reduced from 366 lines to ~65; thin auth+validation wrapper; stale-cache fallback delegated to `fetchStaleCache()`
@@ -93,6 +116,7 @@
 ---
 
 ## Phase 5 — News Route Auth Pattern Normalization
+
 **Status:** Pending
 **Completed:** 2026-04-01
 
@@ -105,19 +129,23 @@
 ---
 
 ## Phase 4 — Top-Movers Service Extraction
+
 **Status:** Pending
 
 ---
 
 ## Phase 5 — News Route Auth Pattern Normalization
+
 **Status:** Pending
 
 ---
 
 ## Phase 6 — Railway ↔ Next.js Contract Formalization
+
 **Status:** Pending
 
 ---
 
 ## Phase 7 — SessionContext Split into AuthContext + UIContext
+
 **Status:** Pending
