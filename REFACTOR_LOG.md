@@ -117,25 +117,6 @@
 
 ## Phase 5 — News Route Auth Pattern Normalization
 
-**Status:** Pending
-**Completed:** 2026-04-01
-
-**Pre-Check:** `grep -n "drift_state\|computeDriftState\|drift_pct.*green\|drift_pct.*yellow\|drift_pct.*red" app/api/cron/drift-digest/route.ts` — no matches
-
-**Finding:** `cron/drift-digest/route.ts` uses a binary breach check (`drift > silo.drift_threshold`) — it never implemented green/yellow/red classification because its purpose is breach detection for email digest, not three-state UI classification. `computeDriftState` lives correctly in `lib/drift.ts` and is used by `holdings/route.ts` and `drift/route.ts`. The duplication noted in B-2 never existed in this form.
-
-**Verification:** `tsc --noEmit` ✅ | `pnpm test lib/drift.test.ts` — 9 tests ✅
-
----
-
-## Phase 4 — Top-Movers Service Extraction
-
-**Status:** Pending
-
----
-
-## Phase 5 — News Route Auth Pattern Normalization
-
 **Status:** ✅ COMPLETED
 **Completed:** 2026-04-01
 
