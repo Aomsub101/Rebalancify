@@ -31,7 +31,7 @@ class BackfillRequest(BaseModel):
 # FastAPI router
 # ---------------------------------------------------------------------------
 
-router = APIRouter(prefix="/backfill_debut", tags=["backfill_debut"])
+router = APIRouter(prefix="/backfill_debut/", tags=["backfill_debut"])
 
 
 @router.post("/")

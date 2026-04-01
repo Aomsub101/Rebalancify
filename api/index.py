@@ -26,7 +26,6 @@ ALLOWED_ORIGINS = [
     "https://rebalancify.vercel.app",  # production
 ]
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
