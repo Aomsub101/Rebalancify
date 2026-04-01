@@ -5,7 +5,8 @@
     "nixpacks": {
       "languages": {
         "python": {
-          "version": "3.12"
+          "version": "3.12",
+          "poetry": true
         }
       }
     }
