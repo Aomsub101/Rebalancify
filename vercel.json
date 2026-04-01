@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "experimentalServices": {
     "python-api": {
-      "entrypoint": "api",
+      "entrypoint": "api/index.py",
       "routePrefix": "/opt"
     }
   },
