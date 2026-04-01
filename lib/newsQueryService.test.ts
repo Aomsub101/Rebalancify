@@ -9,7 +9,21 @@
  *   - paginateArticles: slices with total + hasMore flag
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// ---------------------------------------------------------------------------
+// Supabase client mock — used for createNewsClient factory tests
+// ---------------------------------------------------------------------------
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    auth: { getUser: vi.fn() },
+    from: vi.fn(),
+    global: { headers: {} },
+  })),
+}))
+
+import { createClient } from '@supabase/supabase-js'
+import { createNewsClient } from './newsQueryService'
 import {
   splitIntoTiers,
   mergeAndRankArticles,
@@ -238,5 +252,41 @@ describe('paginateArticles', () => {
     const { items: page, hasMore } = paginateArticles(items, 10, 10)
     expect(page).toHaveLength(0)
     expect(hasMore).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// createNewsClient
+// ---------------------------------------------------------------------------
+
+describe('createNewsClient', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('calls createClient with Bearer token in Authorization header', () => {
+    const token = 'Bearer test-token-456'
+    createNewsClient(token)
+    expect(createClient).toHaveBeenCalledWith(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      expect.objectContaining({
+        global: expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: token }),
+        }),
+      }),
+    )
+  })
+
+  it('returns a SupabaseClient-shaped object with auth and from', () => {
+    const client = createNewsClient('Bearer token') as unknown as Record<string, unknown>
+    expect(client).toHaveProperty('auth')
+    expect(client).toHaveProperty('from')
+  })
+
+  it('creates a new client each call (not cached)', () => {
+    createNewsClient('Bearer token1')
+    createNewsClient('Bearer token2')
+    expect(createClient).toHaveBeenCalledTimes(2)
   })
 })

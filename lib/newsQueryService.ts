@@ -1,12 +1,26 @@
 /**
  * lib/newsQueryService.ts
- * Pure helper functions for news query endpoints.
  *
- * splitIntoTiers  — separates articles into tier-1 (tickers overlap) and
- *                   tier-2 (metadata.related_tickers overlap, not in tier-1)
- * mergeAndRankArticles — combines tiers, deduplicates by id, tier-1 first
- * paginateArticles — slices an array for a given page + limit
+ * Pure helper functions for news query endpoints:
+ *   splitIntoTiers      — separates articles into tier-1 (tickers overlap) and
+ *                         tier-2 (metadata.related_tickers overlap, not in tier-1)
+ *   mergeAndRankArticles — combines tiers, deduplicates by id, tier-1 first
+ *   paginateArticles    — slices an array for a given page + limit
+ *
+ * Factory functions for Supabase client construction:
+ *   createNewsClient    — user-scoped client with Bearer-token auth header
+ *                         (used by news routes that receive TanStack Query
+ *                          bearer tokens from client components)
+ *
+ * NOTE: The news routes use a direct @supabase/supabase-js client with
+ * Bearer-token auth instead of createServerClient(). This is because TanStack
+ * Query useQuery calls fire from client components with no cookie jar
+ * available server-side. The bearer token is validated server-side in each
+ * route handler via supabase.auth.getUser().
+ * See B-6 in DOCS/architecture/integration_map.md.
  */
+
+import { createClient } from '@supabase/supabase-js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -149,4 +163,20 @@ export function paginateArticles<T>(
   const items = articles.slice(offset, offset + limit)
   const hasMore = offset + limit < total
   return { items, total, hasMore }
+}
+
+// ---------------------------------------------------------------------------
+// createNewsClient — factory for Bearer-token auth (used by news routes)
+// ---------------------------------------------------------------------------
+
+export function createNewsClient(bearerToken: string) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: { Authorization: bearerToken },
+      },
+    },
+  )
 }

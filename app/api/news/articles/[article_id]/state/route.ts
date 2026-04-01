@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createNewsClient } from '@/lib/newsQueryService'
 
 interface StateBody {
   is_read?: boolean
@@ -22,15 +22,8 @@ export async function PATCH(
   const { article_id } = await params
 
   // Auth check
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: { Authorization: request.headers.get('Authorization') ?? '' },
-      },
-    }
-  )
+  const bearerToken = request.headers.get('Authorization') ?? ''
+  const supabase = createNewsClient(bearerToken)
 
   const {
     data: { user },

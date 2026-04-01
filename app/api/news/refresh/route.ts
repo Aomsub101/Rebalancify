@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createNewsClient } from '@/lib/newsQueryService'
 import { fetchFinnhubNews, fetchFmpNews, deduplicateArticles, type NewsArticle } from '@/lib/newsService'
 
 // ---------------------------------------------------------------------------
@@ -40,16 +41,9 @@ interface NewsCacheRow {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request): Promise<NextResponse> {
-  // Auth check
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: { Authorization: request.headers.get('Authorization') ?? '' },
-      },
-    }
-  )
+  // Auth check — user-scoped client with Bearer token
+  const bearerToken = request.headers.get('Authorization') ?? ''
+  const supabase = createNewsClient(bearerToken)
 
   const {
     data: { user },

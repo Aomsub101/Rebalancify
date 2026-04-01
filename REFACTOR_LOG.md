@@ -136,7 +136,28 @@
 
 ## Phase 5 — News Route Auth Pattern Normalization
 
-**Status:** Pending
+**Status:** ✅ COMPLETED
+**Completed:** 2026-04-01
+
+### Phase 5a — Document Bearer-token workaround ✅
+
+- MODIFIED: `lib/supabase/server.ts` — added documentation comment explaining news routes use direct `@supabase/supabase-js` client with Bearer-token auth (not `createServerClient()`) because TanStack Query `useQuery` fires from client components with no cookie jar server-side
+
+### Phase 5b — Create typed news query client ✅
+
+- MODIFIED: `lib/newsQueryService.ts` — added `createNewsClient(bearerToken)` factory function; updated file docblock with B-6 architecture note
+- MODIFIED: `lib/newsQueryService.test.ts` — added 3 TDD tests for `createNewsClient`: Bearer token passed in Authorization header, returns SupabaseClient-shaped object, creates new client per call (no caching)
+
+### Phase 5c — Normalize Bearer-token routes ✅
+
+- MODIFIED: `app/api/news/articles/[article_id]/state/route.ts` — replaced 5-line inline `createClient(...)` → `createNewsClient(bearerToken)`
+- MODIFIED: `app/api/news/macro/route.ts` — replaced 5-line inline `createClient(...)` → `createNewsClient(bearerToken)`
+- MODIFIED: `app/api/news/portfolio/route.ts` — replaced 5-line inline `createClient(...)` → `createNewsClient(bearerToken)`
+- MODIFIED: `app/api/news/refresh/route.ts` — replaced user-scoped Bearer client (line 44) → `createNewsClient(bearerToken)`; `SUPABASE_SERVICE_ROLE_KEY` service client (line 68) kept inline — `news_cache` has no per-user RLS for writes, service-role bypass is architecturally correct per B-6
+
+**Note:** `refresh/route.ts` retains `import { createClient } from '@supabase/supabase-js'` for the service-role client only.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test lib/newsQueryService.test.ts` — 29 tests ✅ | `pnpm test app/api/news/` — 13 tests ✅ | `pnpm test` — 58 files, 573 tests ✅
 
 ---
 
