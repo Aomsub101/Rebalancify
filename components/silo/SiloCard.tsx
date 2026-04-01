@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AlpacaLiveBadge } from '@/components/shared/AlpacaLiveBadge'
-import type { DriftAsset } from '@/components/overview/PortfolioSummaryCard'
+import type { DriftAsset } from '@/lib/types/portfolio'
 
 export interface SiloCardData {
   id: string

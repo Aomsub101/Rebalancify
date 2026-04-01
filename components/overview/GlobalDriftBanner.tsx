@@ -6,7 +6,7 @@
  */
 import { AlertCircle } from 'lucide-react'
 import { DriftBadge } from '@/components/shared/DriftBadge'
-import type { DriftAsset } from './PortfolioSummaryCard'
+import type { DriftAsset } from '@/lib/types/portfolio'
 
 interface Props {
   /** All drift assets across all silos, pre-filtered to drift_breached === true */

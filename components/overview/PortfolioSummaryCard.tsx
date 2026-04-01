@@ -4,14 +4,7 @@
  *        active silo count [X/5], and total unique asset count.
  */
 import { TrendingUp, PieChart, BarChart2 } from 'lucide-react'
-
-export interface DriftAsset {
-  asset_id: string
-  ticker: string
-  drift_pct: number
-  drift_state: 'green' | 'yellow' | 'red'
-  drift_breached: boolean
-}
+import type { DriftAsset } from '@/lib/types/portfolio'
 
 export interface SiloForSummary {
   id: string

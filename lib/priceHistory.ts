@@ -1,5 +1,8 @@
 /**
  * lib/priceHistory.ts
+ * TODO(STORY-044): activate this — wire to /api/market/price-history endpoint
+ *                  and remove this comment once asset_historical_data table is
+ *                  populated via the yfinance UPSERT pipeline.
  * Stale-while-revalidate price history fetch service.
  * Uses yahoo-finance2 to fetch up to 5 years of daily OHLCV data,
  * caches in Supabase asset_historical_data, and returns PriceSeries.
