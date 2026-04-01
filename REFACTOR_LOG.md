@@ -76,8 +76,31 @@
 
 ---
 
-## Phase 3 — Eliminate Drift Logic Duplication
+## Phase 4 — Top-Movers Service Extraction ✅
+**Completed:** 2026-04-01
+
+**Changes:**
+- NEW: `lib/topMoversService.ts` — extracted service (FMP, Finnhub, CoinGecko, stale-cache helpers); `fetchTopMovers(type)` returns `null` on all-source failure; stale-cache handled by caller
+- NEW: `lib/topMoversService.test.ts` — 8 TDD tests: FMP→Finnhub fallback, Finnhub failure, all-sources-null, correct price/change_pct shape, CoinGecko success/failure
+- MODIFIED: `app/api/market/top-movers/route.ts` — reduced from 366 lines to ~65; thin auth+validation wrapper; stale-cache fallback delegated to `fetchStaleCache()`
+- MODIFIED: `components/discover/TopMoversTable.tsx` — replaced local `TopMoverItem` interface with `import { TopMoverItem } from '@/lib/topMoversService'`
+- FIXED: `app/api/market/top-movers/__tests__/route.test.ts` — corrected two `makeStaleDb()` mock chains (`.select().eq().limit()` not `.select().eq().select().limit()`)
+
+**Note:** `fetchTopMovers(type)` accepts no SupabaseClient parameter — stale-cache fallback is handled by the thin wrapper, not the service, per audit review.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test lib/topMoversService.test.ts` — 8 tests ✅ | `pnpm test app/api/market/top-movers/__tests__/route.test.ts` — 10 tests ✅ | `pnpm test` — 58 files, 570 tests ✅
+
+---
+
+## Phase 5 — News Route Auth Pattern Normalization
 **Status:** Pending
+**Completed:** 2026-04-01
+
+**Pre-Check:** `grep -n "drift_state\|computeDriftState\|drift_pct.*green\|drift_pct.*yellow\|drift_pct.*red" app/api/cron/drift-digest/route.ts` — no matches
+
+**Finding:** `cron/drift-digest/route.ts` uses a binary breach check (`drift > silo.drift_threshold`) — it never implemented green/yellow/red classification because its purpose is breach detection for email digest, not three-state UI classification. `computeDriftState` lives correctly in `lib/drift.ts` and is used by `holdings/route.ts` and `drift/route.ts`. The duplication noted in B-2 never existed in this form.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test lib/drift.test.ts` — 9 tests ✅
 
 ---
 

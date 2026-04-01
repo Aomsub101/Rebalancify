@@ -104,9 +104,7 @@ function makeStaleDb() {
       return {
         select: () => ({
           eq: () => ({
-            select: () => ({
-              limit: () => ({ data: assetRows, error: null }),
-            }),
+            limit: () => ({ data: assetRows, error: null }),
           }),
         }),
       }
@@ -274,9 +272,7 @@ describe('GET /api/market/top-movers', () => {
         return {
           select: () => ({
             eq: () => ({
-              select: () => ({
-                limit: () => ({ data: assetRows, error: null }),
-              }),
+              limit: () => ({ data: assetRows, error: null }),
             }),
           }),
         }

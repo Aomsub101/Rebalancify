@@ -3,14 +3,9 @@ import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { formatNumber } from '@/lib/formatNumber'
+import { TopMoverItem } from '@/lib/topMoversService'
 
-// TopMoverItem matches the API contract from GET /api/market/top-movers
-export interface TopMoverItem {
-  ticker: string
-  name: string
-  price: string      // 8dp string
-  change_pct: number // signed, 3dp (positive = gainer, negative = loser)
-}
+export type { TopMoverItem }
 
 interface Props {
   gainers: TopMoverItem[]
