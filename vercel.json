@@ -1,11 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "python/backfill_debut.py": {
+    "api/backfill_debut.py": {
       "runtime": "@vercel/python@1.0.0",
       "maxDuration": 60
     },
-    "python/optimize.py": {
+    "api/optimize.py": {
       "runtime": "@vercel/python@1.0.0",
       "maxDuration": 300
     }
