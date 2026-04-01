@@ -150,6 +150,29 @@ export async function POST(request: Request, { params }: RouteContext) {
     console.warn('[asset-mappings POST] holdings auto-upsert failed:', holdingsErr.message)
   }
 
+  // 4c. Best-effort market_debut_date backfill — fire-and-forget, non-blocking.
+  // Triggers yfinance 5yr history fetch via Railway. Does not block the 201 response.
+  // The backfill's own onConflict upsert (on ticker) will set market_debut_date correctly.
+  // Uses same origin-based URL construction as holdings/route.ts:150.
+  const origin = request.headers.get('origin') ?? 'http://localhost:3000'
+  Promise.resolve().then(async () => {
+    try {
+      const backfillRes = await fetch(`${origin}/api/backfill_debut`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker: asset.ticker as string }),
+      })
+      if (!backfillRes.ok) {
+        // Silent best-effort — same as price fetch below. Never surfaces to client.
+        console.warn(
+          `[asset-mappings POST] backfill_debut failed for ${asset.ticker}: ${backfillRes.status}`
+        )
+      }
+    } catch {
+      // Silent best-effort
+    }
+  })
+
   // 7. Best-effort price cache population (AC6) — failure must not block 201
   try {
     await fetchPrice(

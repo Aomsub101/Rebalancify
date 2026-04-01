@@ -39,6 +39,25 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### HOTFIX — `market_debut_date` always NULL for newly added assets
+**Completed:** 2026-04-01
+
+**Root cause:**
+`POST /api/silos/[silo_id]/asset-mappings` upserts assets into the `assets` table but never populates `market_debut_date`. Two data drops: (1) `market_debut_date` was absent from the upsert payload entirely; (2) no call to `/api/backfill_debut` was made after asset creation. The backfill only fired later as a side-effect of `GET /holdings` or `POST /api/optimize`, leaving newly added assets with NULL indefinitely.
+
+**What was fixed:**
+- `app/api/silos/[silo_id]/asset-mappings/route.ts`: Added fire-and-forget `Promise.resolve().then()` block (non-blocking, no `await`) that calls `/api/backfill_debut` after a successful asset upsert. Uses the same `origin` header URL construction as the identical pattern in `holdings/route.ts:150`. Silent best-effort — failures are logged but never surface to the client. Notably, `market_debut_date: null` was NOT added to the initial upsert payload — doing so would overwrite an existing correct date with NULL on asset re-add. The backfill's own `onConflict: ticker` upsert handles setting it correctly.
+
+**Architectural note:**
+The backfill path: `asset-mappings/route.ts` → `app/api/backfill_debut/route.ts` (Next.js proxy) → Railway FastAPI → `backfill_debut.py` → yfinance 5yr history → `assets.market_debut_date`. The 5yr lookback is a known limitation — any ticker that IPO'd >5 years ago will have an incorrect (truncated) date. Not in scope for this fix.
+
+**Files modified:**
+- `app/api/silos/[silo_id]/asset-mappings/route.ts`
+
+**Quality gates passed:** type-check ✅ | test ✅ (573/573) | build ✅
+
+---
+
 ### HOTFIX — Railway startup TypeError: 'X-API-Key' is not callable
 **Completed:** 2026-04-01
 
