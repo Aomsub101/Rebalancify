@@ -426,7 +426,263 @@ Phase 5 is a clean normalization of the Bearer-token Supabase client pattern acr
 
 ---
 
+## Phase 6 — Railway ↔ Next.js Contract Formalization
+
+**Phase Audited:** Phase 6
+**Commit Hash:** N/A — Phase 6 was correctly identified as a NO-OP. No commit was made for this phase (verified against git log; the Phase 6 entry in REFACTOR_LOG.md was added as part of the Phase 7 commit `81b4c04`).
+**Files Touched (by analysis):** `REFACTOR_LOG.md` (Phase 6 entry added), no source files modified.
+
+---
+
+### Scope Creep Assessment: ✅ PASS (NO-OP)
+
+- No source files were modified for Phase 6. The phase was correctly classified as a NO-OP because `lib/types/simulation.ts` was already complete from Phase 1c.
+- No logic was changed. No new interfaces introduced.
+
+---
+
+### Architectural Illusion Assessment: ✅ PASS (NO-OP)
+
+- Phase 1c already verified that `SimulationResult`, `SimulationStrategy`, and `SimulationMetadata` in `lib/types/simulation.ts` match the Railway `api/optimize.py` `run_optimization()` return value exactly:
+  - `strategies.not_to_lose/expected/optimistic.weights` → `Record<string, number>` ✅
+  - `strategies.*.return_3m` → `string` ✅
+  - `strategies.*.range` → `string` ✅
+  - `metadata.is_truncated_below_3_years` → `boolean` ✅
+  - `metadata.limiting_ticker` → `string` ✅
+  - `metadata.lookback_months` → `number` ✅
+- `app/api/optimize/route.ts` is a pure streaming passthrough (no caching, no transformation) ✅
+- Components (`SimulationResultsTable`, `StrategyCard`, `SiloDetailView`) import from `lib/types/simulation.ts` ✅
+
+---
+
+### Next.js & Railway Contracts: ✅ PASS (NO-OP)
+
+- No Next.js `fetch` caching, `revalidate`, `revalidateTag`, or `Cache-Control` headers were touched.
+- No Railway/FastAPI contract changes — the TypeScript interfaces were already aligned.
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- `tsc --noEmit` — clean (no output) ✅
+- `pnpm test` — 58 files, 573 tests passing ✅
+- No import sites were broken. No orphaned types.
+
+---
+
+### Verdict: **PASS**
+
+**No critical flaws detected.**
+
+Phase 6 is correctly classified as a NO-OP. The simulation types were already complete from Phase 1c. No source files were modified. All verification passes.
+
+---
+
+---
+
+## Phase 7 — SessionContext Split into AuthContext + UIContext
+
+**Phase Audited:** Phase 7 (all sub-phases: 7a, 7b, 7c)
+**Commit Hash:** `81b4c04` — "refactor(Phase 7): split SessionContext into AuthContext + UIContext"
+**Files Touched (by commit):** `contexts/AuthContext.tsx` (NEW), `contexts/UIContext.tsx` (NEW), `contexts/SessionContext.tsx` (modified), `components/providers.tsx` (modified), `components/layout/Sidebar.tsx` (modified), `components/layout/TopBar.tsx` (modified), `components/shared/OnboardingGate.tsx` (modified), `components/shared/OnboardingModal.tsx` (modified), `components/shared/ProgressBanner.tsx` (modified), `components/shared/OnboardingGate.test.tsx` (updated), `components/shared/OnboardingModal.test.tsx` (updated), `components/shared/ProgressBanner.test.tsx` (updated), `app/(dashboard)/overview/page.tsx` (modified), `REFACTOR_LOG.md`
+
+---
+
+### Pre-Audit Verification
+
+- `tsc --noEmit` — clean (no output) ✅
+- `pnpm test` — 58 files, 573 tests passing ✅
+
+---
+
+### Phase 7a — Scaffold UIContext + mount in providers
+
+#### Scope Creep Assessment: ✅ PASS
+
+- `contexts/UIContext.tsx` created with `useUI()` and `useSiloCount()` hooks — exactly as specified.
+- `components/providers.tsx` updated to mount `UIContextProvider` — exactly as specified.
+- No other files modified in Phase 7a.
+
+#### ⚠️ CRITICAL ARCHITECTURAL FLAW — Triple `onAuthStateChange` Subscription
+
+**Severity: High**
+
+`providers.tsx` mounts providers in this order:
+```
+AuthProvider → SessionProvider → UIContextProvider
+```
+
+Each of these three providers independently calls `supabase.auth.onAuthStateChange(...)` on the same Supabase client instance:
+
+| Provider | `onAuthStateChange` callback |
+|---|---|
+| `AuthProvider` (AuthContext.tsx:68) | Sets `session`, `profile`; calls `queryClient.invalidateQueries({ queryKey: ['silos'] })` |
+| `SessionProvider` (SessionContext.tsx:106) | Sets `session`, `profile`, `showUSD`, `siloCount` |
+| `UIContextProvider` (UIContext.tsx:42) | Sets `showUSD`, `onboarded`, `progressBannerDismissed` |
+
+**All three fire on every auth state change** (sign-in, sign-out, token refresh). Each makes redundant Supabase calls. On a cold sign-in, this fires 3 concurrent profile queries and 3 concurrent silo-count queries to Supabase.
+
+**Root cause:** Phase 7a specified mounting `UIContextProvider` alongside `SessionProvider` in the AppShell, but did not account for the fact that `SessionProvider` still wraps its own full `onAuthStateChange` subscription — even though `SessionContext.tsx` was "narrowed to auth state" per the plan. The `SessionProvider` comment (SessionContext.tsx lines 3–19) acknowledges the narrowing but `SessionProvider` still runs its own full subscription (lines 106–139).
+
+**Risk:** The three providers each hold related state (`showUSD`, `onboarded`, `siloCount`) and each subscribes independently. If one subscription sets `showUSD` and another fires a stale callback before the new state propagates, the UI can briefly show inconsistent values. Under high-frequency auth events (e.g., rapid token refresh cycles), these could manifest as race conditions.
+
+**Fix recommendation:** The `SessionProvider`'s `onAuthStateChange` subscription must be removed or disabled. `SessionProvider` should consume `AuthContext`'s auth state instead of re-subscribing directly. Alternatively, `SessionProvider` should be unmounted entirely since `AuthContext` now owns auth state and `UIContext` owns UI state.
+
+---
+
+#### UI State Duplication Between SessionProvider and UIContext
+
+**Severity: Medium**
+
+`SessionProvider` manages: `showUSD`, `siloCount`, `onboarded`, `progressBannerDismissed` (SessionContext.tsx lines 75–77, 92, 100, 118–119, 126, 152–153).
+
+`UIContextProvider` independently syncs the same fields via its own `onAuthStateChange` callback (UIContext.tsx lines 50–53):
+```typescript
+setShowUSD(profileData.show_usd_toggle ?? false)
+setOnboarded(profileData.onboarded ?? false)
+setProgressBannerDismissed(profileData.progress_banner_dismissed ?? false)
+```
+
+`UIContext` has no direct access to `profileData` — it re-fetches it independently via a second `supabase.from('user_profiles').select(...)` call on every auth state change.
+
+**This means on sign-in:** 3 profile queries fire simultaneously (AuthContext + SessionProvider + UIContext), all fetching the same `user_profiles` row.
+
+**The `showUSD` inconsistency risk:** `SessionProvider.refreshProfile()` fetches profile and sets `showUSD` locally. `UIContext`'s subscription also sets `showUSD`. If the two fire out-of-order, `showUSD` in SessionProvider and UIContext can briefly differ.
+
+**Fix recommendation:** `UIContext` should either (a) receive `showUSD`/`onboarded`/`progressBannerDismissed` as props from `AuthContext` (prop-drilled through SessionProvider), or (b) `AuthContext` should expose setters that both `SessionProvider` and `UIContext` call, centralized in one place.
+
+---
+
+### Phase 7b — Component migrations (TopBar, OnboardingGate, OnboardingModal, overview page)
+
+#### Scope Creep Assessment: ✅ PASS
+
+- Exactly the specified files modified (TopBar, OnboardingGate, OnboardingModal, overview/page.tsx, 2 test files).
+- No additional components migrated beyond the specified set.
+
+#### Silent Breakage Test: ✅ PASS
+
+- All migrated components (`TopBar.tsx`, `OnboardingGate.tsx`, `OnboardingModal.tsx`, `overview/page.tsx`) verified reading from the correct context interfaces (`useAuth()` for auth state, `useUI()` for UI state).
+- Test mocks updated correctly for `OnboardingGate.test.tsx` and `OnboardingModal.test.tsx`.
+
+---
+
+### Phase 7c — Narrow SessionContext + migrate ProgressBanner + Sidebar
+
+#### Scope Creep Assessment: ✅ PASS
+
+- Exactly the specified changes: `refreshProfile()` gains `queryClient.invalidateQueries({ queryKey: ['silos'] })`; `ProgressBanner` and `Sidebar` migrated to `useAuth()`.
+
+#### ⚠️ Architectural Divergence — `Sidebar` Does NOT Use `useSiloCount()`
+
+**Severity: Medium**
+
+The plan §Phase 7b stated:
+> "Extract `siloCount` from `UIContext` to be derived from `useQuery(['silos'])` within `Sidebar.tsx`"
+
+The actual implementation in `Sidebar.tsx` (line 51):
+```typescript
+const { data: profileData, isLoading: profileLoading } = useQuery({
+  queryKey: ['profile'],
+  queryFn: fetchProfile,
+  enabled: !!session,
+})
+const siloCount = profileData?.active_silo_count ?? 0
+```
+
+`Sidebar` derives `siloCount` from the `/api/profile` response (`active_silo_count` field), **not** from `useSiloCount()` which calls `/api/silos` directly.
+
+**Three separate silo-count data flows now exist:**
+
+| Location | Source | Method |
+|---|---|---|
+| `Sidebar.tsx:51` | `/api/profile` → `active_silo_count` | `useQuery(['profile'])` |
+| `OnboardingGate.tsx:19` | `useSiloCount()` → `/api/silos` | `useQuery(['silos'])` → `.filter(is_active).length` |
+| `ProgressBanner.tsx:54` | `useQuery(['silos'])` → `/api/silos` | Direct query, not `useSiloCount()` |
+
+**Risk:** The `active_silo_count` on the profile object is a denormalized count that could drift from the actual `COUNT(*) FROM silos WHERE is_active = TRUE` if the profile's cached count becomes stale after a silo creation/deletion that hasn't triggered a profile refresh. Meanwhile, `useSiloCount()` always queries the DB directly.
+
+**Additionally:** `ProgressBanner` does NOT use `useSiloCount()` — it has its own identical `useQuery<SiloResponse[]>({ queryKey: ['silos'], queryFn: fetchSilos })` (ProgressBanner.tsx:54). This duplicates `useSiloCount()` logic inline.
+
+**Fix recommendation:** `Sidebar` should use `useSiloCount()` for consistency with the other two callers. `ProgressBanner` should also use `useSiloCount()` instead of inlining the same query. This was the plan's intent.
+
+---
+
+#### `AuthContext.refreshProfile()` — Missing `showUSD` Sync
+
+**Severity: Medium**
+
+`AuthContext.refreshProfile()` (AuthContext.tsx lines 48–63):
+```typescript
+const refreshProfile = async () => {
+  const supabase = createClient()
+  const { data: { user: currentUser } } = await supabase.auth.getUser()
+  if (!currentUser) return
+  const { data: profileData } = await supabase.from('user_profiles').select('*').eq('id', currentUser.id).single()
+  setProfile(profileData ?? null)
+  queryClient.invalidateQueries({ queryKey: ['silos'] })
+}
+```
+
+`refreshProfile()` sets `profile` in `AuthContext`, but does NOT set `showUSD`. `UIContext` independently syncs `showUSD` from its own `onAuthStateChange` callback. The `showUSD` setter lives only in `UIContext`. `AuthContext` has no awareness of `showUSD`.
+
+When `OnboardingModal` or `ProgressBanner` call `refreshProfile()` after mutations that change `show_usd_toggle` or `onboarded`, the flow is: `refreshProfile()` → `AuthContext` refreshes `profile` → `UIContext`'s parallel subscription eventually picks up the change. There is no guaranteed ordering or single owner for `showUSD`.
+
+**Fix recommendation:** `AuthContext.refreshProfile()` should return the new `profileData` (or expose a `setShowUSD` setter) and `UIContext`'s `onAuthStateChange` should be the single syncing mechanism — OR `AuthContext` should own `showUSD` and expose a `setShowUSD` that `UIContext` calls.
+
+---
+
+### Phase 7 — Overall Assessment
+
+#### Architectural Illusion Assessment: ⚠️ PARTIALLY ACHIEVED
+
+**What was achieved:**
+- `AuthContext` is a clean auth-state-only context ✅
+- `UIContext` is a clean UI-state-only context ✅
+- `useSiloCount()` hook correctly derives `siloCount` from `useQuery(['silos'])` ✅
+- `ProgressBanner` and `Sidebar` migrated to `useAuth()` ✅
+- `SessionContext` retained for backward compatibility ✅
+
+**What was NOT achieved:**
+- The three-provider architecture creates triple redundant auth subscriptions (SessionProvider + AuthProvider + UIContextProvider)
+- `SessionProvider` still runs its own full `onAuthStateChange` subscription, duplicating `AuthProvider`'s auth-state management
+- `UIContext` and `SessionProvider` independently sync the same UI fields from the same auth events — no single source of truth
+- Three different data flows for `siloCount` across three components
+
+**The B-8 problem (siloCount invalidation) was solved** via the `refreshProfile()` → `invalidateQueries({ queryKey: ['silos'] })` chain, but the solution introduced a triple-subscription architecture that could cause race conditions under heavy auth event firing.
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- `tsc --noEmit` — clean ✅
+- `pnpm test` — 58 files, 573 tests ✅
+- No broken imports. All components resolve to the correct context interfaces.
+
+---
+
+### Verdict: **PASS WITH REVISIONS**
+
+**No critical flaws detected that break current functionality.** All 573 tests pass. TypeScript compiles cleanly. All components render correctly.
+
+**However, systemic architectural issues were introduced:**
+
+1. **Triple `onAuthStateChange` subscription** — three providers all independently subscribe to the same Supabase auth events, creating redundant network calls and potential race conditions on auth state changes.
+2. **Duplicate UI state between `SessionProvider` and `UIContext`** — both manage `showUSD`, `onboarded`, `progressBannerDismissed` via independent subscriptions; no single source of truth.
+3. **Three divergent `siloCount` data flows** — `Sidebar` uses profile API; `OnboardingGate` uses `useSiloCount()`; `ProgressBanner` inlines its own query. The plan intended all three to use the TanStack Query derived hook.
+
+**These are design-level issues, not bugs.** The code functions today because the three subscriptions fire in rapid succession and React's reconciliation settles. Under high-frequency auth events (e.g., rapid token refresh cycles), these could manifest as brief UI inconsistencies.
+
+**Execution quality otherwise: High.** The Phase 7 sub-phases were executed in the correct order with verified rollbacks. The block criteria were applied. Migration was incremental. Backward compatibility was preserved via `SessionContext` alias.
+
+**Non-blocking recommendations:**
+- Phase 7a's triple-subscription issue should be resolved by either (a) removing `SessionProvider`'s own `onAuthStateChange` subscription and prop-drilling auth state, or (b) unmounting `SessionProvider` entirely since `AuthContext` now owns auth state.
+- `Sidebar` should use `useSiloCount()` for consistency.
+- `ProgressBanner` should use `useSiloCount()` instead of inlining the same query.
+- `AuthContext.refreshProfile()` should expose `showUSD` sync (or the auth-UI data flow needs a clear single owner).
+
+---
+
 ## Pending Phases (not yet audited)
 
-- Phase 6 — Railway ↔ Next.js Contract Formalization
-- Phase 7 — SessionContext Split into AuthContext + UIContext
+- None — all phases (1–7) have been audited.
