@@ -9,6 +9,16 @@ const baseConfig: NextConfig = {
   // Externalize @napi-rs/canvas and pdf-parse — contains native binaries that webpack
   // cannot bundle (pdf-parse browser build uses DOMMatrix which requires @napi-rs/canvas)
   serverExternalPackages: ['@napi-rs/canvas', 'pdf-parse'],
+
+  webpack: (config) => {
+    // Treat @napi-rs/canvas as an external module — it contains native .node binaries
+    // that webpack cannot parse. This applies to both client and server bundles.
+    config.externals = config.externals || []
+    if (Array.isArray(config.externals)) {
+      config.externals.push('@napi-rs/canvas')
+    }
+    return config
+  },
 };
 
 // next-pwa is a CommonJS module; use require for CJS interop in TS config
