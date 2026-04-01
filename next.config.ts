@@ -5,6 +5,10 @@ const baseConfig: NextConfig = {
   // Next.js proxy routes in app/api/optimize/route.ts and
   // app/api/backfill_debut/route.ts which forward to the Railway
   // FastAPI service. No rewrites needed here.
+
+  // Externalize @napi-rs/canvas and pdf-parse — contains native binaries that webpack
+  // cannot bundle (pdf-parse browser build uses DOMMatrix which requires @napi-rs/canvas)
+  serverExternalPackages: ['@napi-rs/canvas', 'pdf-parse'],
 };
 
 // next-pwa is a CommonJS module; use require for CJS interop in TS config
