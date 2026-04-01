@@ -1,6 +1,21 @@
 import type { NextConfig } from 'next'
 
-const baseConfig: NextConfig = {}
+const baseConfig: NextConfig = {
+  // Forward Python serverless function calls to the /opt prefix
+  // so they don't conflict with Next.js API routes in app/api/
+  async rewrites() {
+    return [
+      {
+        source: "/api/optimize",
+        destination: "/opt/optimize",
+      },
+      {
+        source: "/api/backfill_debut",
+        destination: "/opt/backfill_debut",
+      },
+    ];
+  },
+};
 
 // next-pwa is a CommonJS module; use require for CJS interop in TS config
 // eslint-disable-next-line @typescript-eslint/no-require-imports
