@@ -50,8 +50,29 @@
 
 ---
 
-## Phase 2 — Encryption Adapter Extraction
-**Status:** Pending
+## Phase 2 — Encryption Adapter Extraction ✅
+**Completed:** 2026-04-01
+
+**Changes:**
+- NEW: `lib/encryption/index.ts` — `IEncryption` interface + singleton re-export of `encrypt`/`decrypt` from adapter
+- NEW: `lib/encryption/adapter.ts` — AES-256-GCM implementation (moved from `lib/encryption.ts`; unchanged)
+- NEW: `lib/encryption/encryption.test.ts` — rewritten to import from `./adapter` (tests 3 required properties)
+- DELETED: `lib/encryption.ts` — moved to `lib/encryption/adapter.ts`
+- DELETED: `lib/encryption.test.ts` — replaced by `lib/encryption/encryption.test.ts`
+
+**Import sites verified (import path unchanged — all already used `@/lib/encryption`):**
+- `app/api/auth/schwab/callback/route.ts` — `{ encrypt }`
+- `app/api/profile/route.ts` — `{ encrypt }`
+- `app/api/research/[ticker]/route.ts` — `{ decrypt }`
+- `app/api/research/[ticker]/__tests__/route.test.ts` — `{ decrypt }`
+- `app/api/silos/[silo_id]/sync/route.ts` — `{ decrypt }`
+- `app/api/silos/[silo_id]/__tests__/sync.test.ts` — `{ encrypt }`
+- `app/api/silos/[silo_id]/rebalance/execute/route.ts` — `{ decrypt }`
+- `app/api/silos/[silo_id]/rebalance/execute/__tests__/route.test.ts` — `{ encrypt }`
+
+**Note:** Call sites use 2-argument pattern `(value, key)` throughout. Singleton interface preserved this signature to avoid rewriting all 8 route/test files. Interface surfaces every call site at compile time if adapter ever changes.
+
+**Verification:** `tsc --noEmit` ✅ | `pnpm test lib/encryption/encryption.test.ts` — 3 tests ✅ | `pnpm test` — 57 test files, 562 tests ✅
 
 ---
 

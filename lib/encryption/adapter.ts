@@ -1,10 +1,8 @@
 /**
- * lib/encryption.ts
+ * lib/encryption/adapter.ts
  * AES-256-GCM symmetric encryption helpers.
  *
- * Usage:
- *   const enc = encrypt(plaintext, process.env.ENCRYPTION_KEY!)
- *   const dec = decrypt(enc, process.env.ENCRYPTION_KEY!)
+ * Implements IEncryption (lib/encryption/index.ts).
  *
  * Format: "iv_b64:authTag_b64:data_b64"  (colon-separated base64 segments)
  *
