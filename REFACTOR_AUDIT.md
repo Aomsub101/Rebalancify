@@ -90,9 +90,95 @@ Phase 1 is a textbook low-risk type extraction:
 
 ---
 
+---
+
+## Phase 2 — Encryption Adapter Extraction
+
+**Phase Audited:** Phase 2 (all sub-phases)
+**Commit Hash:** `f230166` — "refactor(Phase 2): extract encryption adapter with IEncryption interface"
+**Files Touched (by commit):** REFACTOR_LOG.md, lib/encryption/adapter.ts (renamed from lib/encryption.ts), lib/encryption/encryption.test.ts (renamed), **lib/encryption/index.ts (NEW)**
+
+---
+
+### Scope Creep Assessment: ✅ PASS
+
+- Exactly 4 files changed: `REFACTOR_LOG.md` (+25 lines), `lib/encryption/adapter.ts` (rename, logic unchanged), `lib/encryption/encryption.test.ts` (rename + import path update), `lib/encryption/index.ts` (new IEncryption interface + re-exports)
+- No new features. No logic changes. Pure physical refactor.
+- The adapter (`lib/encryption/adapter.ts`) is a byte-identical rename of the original with only a header comment update confirming it implements `IEncryption`
+- All 8 route/test import sites confirmed still using `@/lib/encryption` — import path unchanged by plan design
+
+---
+
+### Architectural Illusion Assessment: ⚠️ MINOR DOCUMENTATION CONCERN (non-blocking)
+
+**What was done:**
+- `lib/encryption/index.ts` defines `IEncryption` interface with `encrypt(plaintext, key)` and `decrypt(ciphertext, key)` method signatures
+- `export const encryption: IEncryption = { encrypt, decrypt }` singleton exported
+- `export { encrypt, decrypt }` named function re-exports from `./adapter`
+
+**What all 8 call sites actually use:**
+```typescript
+import { encrypt } from '@/lib/encryption'  // or { decrypt }
+// usage:
+encrypt(value, encKey)
+decrypt(encValue, encKey)
+```
+
+**The gap:** The `IEncryption` interface describes an object with method-call syntax (`interface IEncryption { encrypt(...): string }`), but:
+1. The `encryption` singleton is **never imported or used** by any route or test file in the codebase
+2. All call sites use **named function imports** (`import { encrypt }`) not object-method calls (`encryption.encrypt()`)
+3. The interface's method-call pattern is structurally compatible with the standalone functions (both have `(string, string) => string` signature), so TypeScript compiles cleanly
+
+**Risk:** A future developer reading `lib/encryption/index.ts` might attempt to use `encryption.encrypt()` expecting it to work (it is the interface-suggested API), but since the singleton is never instantiated or provided anywhere, this would be a **runtime error**. This is a documentation/pattern trap, not a functional break.
+
+**Severity: Low** — Named exports work correctly. All 562 tests pass. No call site is broken.
+
+**Fix recommendation (non-blocking):** Either (a) delete the unused `encryption` singleton and keep only the named exports + `IEncryption` type, or (b) actually use the singleton at all call sites and update the plan to reflect a fuller adapter-pattern implementation.
+
+---
+
+### Next.js & Railway Contracts: ✅ PASS
+
+- No Next.js `fetch` caching, `revalidate`, `revalidateTag`, or `Cache-Control` headers in scope for this phase
+- No Railway/FastAPI contract changes — this is a pure client-side AES-256-GCM encryption library with no API or data-fetching semantics
+- The module is fully server-side (Node.js `crypto` module) and safe for all broker credential paths (`Alpaca`, `BITKUB`, `InnovestX`, `Schwab`, `Webull`)
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- `lib/encryption.ts` (original) confirmed deleted — no orphan at old path
+- All 8 import sites resolve via `@/lib/encryption` → `index.ts` → `adapter.ts` — TypeScript follows the index re-exports correctly
+- Test file correctly renamed: `lib/encryption/encryption.test.ts` imports from `./adapter` (valid relative path after rename)
+- `tsc --noEmit` clean (no output = no errors)
+- `pnpm test lib/encryption/encryption.test.ts` — 3/3 ✅ (roundtrip, IV uniqueness, wrong-key error)
+- `pnpm test` — 57 files, 562 tests ✅ — unchanged from Phase 1 baseline
+
+---
+
+### Verdict: **PASS**
+
+**No critical flaws detected.**
+
+Phase 2 is a clean, low-risk extraction:
+- Scope was strictly bounded to the encryption module and its 8 confirmed import sites
+- Import path `@/lib/encryption` preserved across all call sites (the key architectural guarantee)
+- Rename of `lib/encryption.ts` → `lib/encryption/adapter.ts` was clean with only a header comment change
+- TypeScript compiles cleanly; all 562 tests pass
+- No Next.js caching contracts affected
+- No Railway/FastAPI contracts affected
+
+**Execution quality: High**, with one noted documentation concern: the `IEncryption` singleton is unused and could mislead future developers about the intended API pattern. This is non-blocking but should be addressed in a follow-up cleanup.
+
+**Block Criterion Check:** ✅ VERIFIED
+- The pre-execution grep identified exactly 8 import sites (all confirmed by reading the actual files)
+- Import path was preserved as `@/lib/encryption` across all sites
+- Rollback strategy was defined in plan and working tree was clean before execution (confirmed by commit structure)
+
+---
+
 ## Pending Phases (not yet audited)
 
-- Phase 2 — Encryption Adapter Extraction
 - Phase 3 — Eliminate Drift Logic Duplication
 - Phase 4 — Top-Movers Service Extraction
 - Phase 5 — News Route Auth Pattern Normalization
