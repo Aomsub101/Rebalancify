@@ -177,10 +177,169 @@ Phase 2 is a clean, low-risk extraction:
 
 ---
 
+## Phase 3 — Eliminate Drift Logic Duplication
+
+**Phase Audited:** Phase 3 (NO-OP)
+**Commit Hash:** No commit — Phase 3 was assessed as a no-op and documented in the working-tree copy of `REFACTOR_LOG.md` (not yet committed).
+
+---
+
+### Pre-Execution Check Verification
+
+**Required grep** (per refactoring_plan.md §Phase 3):
+```
+grep -n "drift_state\|computeDriftState\|drift_pct.*green\|drift_pct.*yellow\|drift_pct.*red" app/api/cron/drift-digest/route.ts
+```
+**Result:** Zero matches. Confirmed independently.
+
+**`lib/drift.ts` existence check:** `lib/drift.ts` exports `computeDriftState(driftPct: number, threshold: number): DriftState` — the single canonical implementation of three-state drift classification. Confirmed by reading the file.
+
+**Call sites of `computeDriftState` (independent grep):**
+- `app/api/silos/[silo_id]/holdings/route.ts` → `drift_state: computeDriftState(...)` ✅
+- `app/api/silos/[silo_id]/drift/route.ts` → `driftState = computeDriftState(...)` ✅
+- `lib/drift.ts` (self) ✅
+- `lib/drift.test.ts` (tests) ✅
+
+---
+
+### Scope Creep Assessment: ✅ PASS (NO-OP)
+
+- No code was modified. No files were created. Phase 3 correctly identified that the B-2 duplication concern never materialized in this form.
+- The cron route (`cron/drift-digest/route.ts`) uses a **binary** breach check (`drift > silo.drift_threshold`) for its email digest purpose — it was never intended to perform three-state UI classification. The green/yellow/red classification lives correctly in `lib/drift.ts` and is used only by `holdings/route.ts` and `drift/route.ts`.
+- `computeDriftState` is the verified single source of truth.
+
+---
+
+### Architectural Illusion Assessment: ✅ PASS
+
+- `computeDriftState` in `lib/drift.ts` is the canonical implementation. No duplicate exists.
+- The plan's B-2 concern described a scenario where "computeDriftState is implemented in lib/drift.ts **and** re-implemented inline in cron/drift-digest/route.ts." The second instance never existed — the cron route has always used binary threshold comparison only.
+
+---
+
+### Next.js & Railway Contracts: ✅ PASS (NO-OP — no code touched)
+
+- No Next.js caching, `fetch` tags, `revalidate`, or `Cache-Control` headers in scope.
+- No Railway/FastAPI contract changes.
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- `tsc --noEmit` — no output, no errors.
+- `pnpm test lib/drift.test.ts` — **13 tests passing** (note: `REFACTOR_LOG.md` Phase 3 entry states "9 tests" — this is inaccurate; the test file contains 13 tests covering all boundary cases and all pass).
+
+---
+
+### ⚠️ MINOR DOCUMENTATION DISCREPANCY (non-blocking)
+
+**Finding:** `REFACTOR_LOG.md` Phase 3 entry states: "`pnpm test lib/drift.test.ts` — 9 tests ✅"
+
+**Reality:** `pnpm test lib/drift.test.ts` reports **13 tests passing**.
+
+**Analysis:** The test file has 13 tests covering green zone, yellow zone, red zone, custom thresholds, and negative drift. The plan §Phase 3 specified 3 required tests; the implementation added 10 additional boundary cases. The log was written with an incorrect count — the actual test run is authoritative.
+
+**Severity: Low** — The log is a progress tracker. The actual test suite is comprehensive and all 13 tests pass.
+
+---
+
+### Verdict: **PASS**
+
+**No critical flaws detected.**
+
+Phase 3 is correctly classified as a NO-OP. The engineering agent correctly identified that the B-2 duplication concern was based on a false premise — the cron route never implemented three-state drift classification inline. `computeDriftState` in `lib/drift.ts` is the verified single source of truth for all three-state classification.
+
+The only finding is a non-blocking documentation discrepancy in `REFACTOR_LOG.md` (9 tests stated vs. 13 actual).
+
+**Block Criterion Check:** ✅ VERIFIED
+- The required pre-execution grep was run and confirmed zero matches for inline drift state classification in `cron/drift-digest/route.ts`.
+- The block criterion ("if the inline classification logic is absent, Phase 3 is a no-op — verify `lib/drift.ts` exports `computeDriftState` and skip to Phase 4") was correctly applied.
+- No files were modified.
+
+---
+
+---
+
+## Phase 4 — Top-Movers Service Extraction
+
+**Phase Audited:** Phase 4 (all sub-phases)
+**Commit Hash:** `884f1ef` — "refactor(Phase 4): extract top-movers logic into lib/topMoversService"
+**Files Touched (by commit):** `lib/topMoversService.ts` (NEW), `lib/topMoversService.test.ts` (NEW), `app/api/market/top-movers/route.ts` (modified, -313 lines), `app/api/market/top-movers/__tests__/route.test.ts` (modified, mock chain fix), `components/discover/TopMoversTable.tsx` (modified, interface import), `REFACTOR_LOG.md`
+
+---
+
+### Scope Creep Assessment: ✅ PASS
+
+- **Net new files:** `lib/topMoversService.ts` (303 lines) and `lib/topMoversService.test.ts` (197 lines) — both explicitly specified by the plan.
+- **Modified files:** `route.ts` reduced from ~366 lines to ~65 lines (thin auth+validation wrapper) — consistent with plan intent. `TopMoversTable.tsx` updated to import `TopMoverItem` from the service rather than defining it locally — eliminating the duplicate interface that was the B-5 concern. `route.test.ts` mock chain corrected (`.select().eq().limit()` not `.select().eq().select().limit()`) — a bug fix that was part of the refactor.
+- **No new features introduced.** The extraction is pure refactoring — the data-fetching logic and response shapes are identical.
+- The `fetchStaleCache()` function (added to `lib/topMoversService.ts`) was not in the plan's sample code but is correctly scoped — it is the stale-cache mechanism described in the plan's fallback chain (AC-4: all sources unavailable → stale price_cache fallback). The plan's sample showed only `fetchTopMovers(type)`, but the actual implementation correctly exported `fetchStaleCache` to keep the route thin.
+
+---
+
+### Architectural Illusion Assessment: ✅ PASS
+
+**What was extracted — and how cleanly:**
+- `lib/topMoversService.ts` exports two public functions:
+  - `fetchTopMovers(type: 'stocks' | 'crypto')` — pure live-source fetcher, no SupabaseClient parameter. Returns `null` when all live sources fail. Falls back to Finnhub for stocks, returns null for crypto.
+  - `fetchStaleCache(supabase, assetType: 'stock' | 'crypto')` — DB fallback for when live sources fail; called by the route wrapper, not the service.
+- The route (`app/api/market/top-movers/route.ts`) is now a ~65-line thin wrapper: auth check → validation → `fetchTopMovers()` → if null, call `fetchStaleCache()` → return `NextResponse.json()`. The route correctly handles the stale-cache fallback decision.
+- `TopMoversTable.tsx` no longer has a local `TopMoverItem` interface — it imports `import { TopMoverItem } from '@/lib/topMoversService'` and re-exports it as a type. This eliminates the B-5 concern about an abstracted-but-duplicated interface.
+- **Fallback chain confirmed by test:** FMP → Finnhub → null (route then calls `fetchStaleCache`). All three states tested: FMP success, FMP fails/Finnhub succeeds, both fail (returns null).
+
+**Interface correctness check:**
+- `TopMoverItem` shape matches AC-3: `ticker: string`, `name: string`, `price: string` (8dp), `change_pct: number` (3dp signed). Confirmed by `topMoversService.ts` interface and `route.test.ts` format assertions (regex `/^\d+\.\d{8}$/` for price, `toBeCloseTo(4.2, 2)` for `change_pct`).
+
+---
+
+### Next.js & Railway Contracts: ✅ PASS
+
+**Caching:** No Next.js `fetch` caching directives (`next: { revalidate }`, `cacheTag`, `Cache-Control`) introduced in `topMoversService.ts`. The service is purely a data-fetching layer. Comments at lines 16–18 and 48/103/177 document the intended revalidate TTL as a comment for future developers — this was explicitly called out in the plan's "Next.js Caching Note" as the correct approach: "do not introduce new caching directives. Document the intended `revalidate` TTL as a code comment."
+
+**Route contracts:** `app/api/market/top-movers/route.ts` is a thin wrapper. The response shape (`{ type, stale, fetched_at, gainers, losers }`) is preserved. No caching logic was moved or altered — only the data-fetching implementation was extracted.
+
+**No Railway/FastAPI impact** — this is a pure Next.js service layer extraction with no backend contract changes.
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- `tsc --noEmit` — no output, no errors.
+- `pnpm test lib/topMoversService.test.ts` — **8/8 tests passing** ✅
+- `pnpm test app/api/market/top-movers/__tests__/route.test.ts` — **10/10 tests passing** ✅
+- `pnpm test` — 58 files, **570 tests passing** (up from 562 baseline; +8 from the new service test file) ✅
+- **No orphaned imports:** `TopMoversTable.tsx` no longer has a local `TopMoverItem` — verified by grep. `route.ts` imports from `@/lib/topMoversService` — verified by reading the file.
+- **Mock chain fix verified:** `route.test.ts` `makeStaleDb()` now correctly uses `.select().eq().limit()` chain for `assets` and `.select().in()` for `price_cache` — matching what `fetchStaleCache` actually calls in `topMoversService.ts`.
+
+**Independent verification:**
+- `fetchTopMovers` returns `null` on all-source failure — tested by two separate test cases (`'both FMP and Finnhub fail → returns null'`, `'Finnhub fallback also fails → returns null'`, `'CoinGecko fails → returns null'`).
+- Crypto fallback: `fetchTopMovers('crypto')` returns `null` when CoinGecko fails (no second fallback for crypto per plan's AC-2 and the service's fallback chain comment). The route then correctly falls back to `fetchStaleCache(supabase, 'crypto')`.
+
+---
+
+### Verdict: **PASS**
+
+**No critical flaws detected.**
+
+Phase 4 is a clean, well-executed extraction:
+- Scope was strictly bounded to the top-movers data-fetching concern and its two call sites (route + component).
+- `TopMoversTable.tsx` no longer has a local duplicate `TopMoverItem` — B-5 is resolved.
+- The fallback chain (FMP → Finnhub → stale cache for stocks; CoinGecko → stale cache for crypto) is correctly implemented and tested.
+- No Next.js caching was introduced — the service documents its intended TTL as a code comment per the plan's instruction.
+- All 570 tests pass; `tsc --noEmit` is clean.
+
+**Execution quality: High.** The pre-execution grep mapped every inline FMP/Finnhub/CoinGecko branch, and the extraction correctly separates the live-source service from the DB fallback. The `fetchStaleCache` decision (handled at route level, not in the pure service) is architecturally correct.
+
+**Block Criterion Check:** ✅ VERIFIED
+- Pre-execution grep identified the inline FMP, Finnhub, and stale-cache branches in `route.ts` before extraction.
+- No caching directives were introduced.
+- Response shape is byte-for-byte identical to the original (verified by route tests).
+- Rollback strategy was documented in plan.
+
+---
+
 ## Pending Phases (not yet audited)
 
-- Phase 3 — Eliminate Drift Logic Duplication
-- Phase 4 — Top-Movers Service Extraction
 - Phase 5 — News Route Auth Pattern Normalization
 - Phase 6 — Railway ↔ Next.js Contract Formalization
 - Phase 7 — SessionContext Split into AuthContext + UIContext
