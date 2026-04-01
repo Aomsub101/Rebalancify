@@ -338,8 +338,95 @@ Phase 4 is a clean, well-executed extraction:
 
 ---
 
+## Phase 5 — News Route Auth Pattern Normalization
+
+**Phase Audited:** Phase 5 (all sub-phases: 5a, 5b, 5c)
+**Commit Hash:** `616bb5a` — "refactor(Phase 5): normalize Bearer-token Supabase client in news routes"
+**Files Touched (by commit):** `REFACTOR_LOG.md`, `lib/newsQueryService.ts` (modified), `lib/newsQueryService.test.ts` (modified), `app/api/news/articles/[article_id]/state/route.ts` (modified), `app/api/news/macro/route.ts` (modified), `app/api/news/portfolio/route.ts` (modified), `app/api/news/refresh/route.ts` (modified)
+
+---
+
+### Scope Creep Assessment: ✅ PASS
+
+- **Phase 5a (documentation):** The plan specified adding a documentation comment to `lib/supabase/server.ts`. The comment was NOT added to that file. The Bearer-token workaround note was instead added to `lib/newsQueryService.ts` — which is where the `createNewsClient` factory lives. The note is present and accurate; it is in a different file than specified. This is non-blocking but worth documenting.
+- **Phase 5b (factory):** `createNewsClient(bearerToken)` added to `lib/newsQueryService.ts` — exactly as specified. 3 TDD tests added to `lib/newsQueryService.test.ts` — exactly as specified.
+- **Phase 5c (route normalization):** 4 route files updated to use `createNewsClient()` instead of inline `createClient(...)` with Authorization header — exactly as specified. `refresh/route.ts` correctly retains a separate inline service-role client (`SUPABASE_SERVICE_ROLE_KEY`) for `news_cache` writes, as `news_cache` has no per-user RLS.
+- No new features. No logic changes. Pure refactoring.
+
+---
+
+### Architectural Illusion Assessment: ✅ PASS
+
+**Bearer-token auth pattern — correctly implemented:**
+- `createNewsClient(bearerToken)` at `lib/newsQueryService.ts:172-182` returns `createClient(url, key, { global: { headers: { Authorization: bearerToken } } })`.
+- All 4 news routes (articles/state, macro, portfolio, refresh user-client) now follow the identical pattern: extract Bearer token from `request.headers.get('Authorization')`, pass to `createNewsClient()`.
+- The TanStack Query integration context (B-6 concern) is correctly documented in the file docstring at `lib/newsQueryService.ts:15-20`. This is the architecture note — it explains *why* `createServerClient()` with cookie-jar cannot be used (TanStack Query fires from client components with no server-side cookie jar).
+
+**Factory pattern:**
+- `createNewsClient` is a pure factory — creates a new client per call with no caching (confirmed by `lib/newsQueryService.test.ts:287-291` test: `createClient` called twice = 2 calls).
+- The factory correctly encapsulates the `global.headers.Authorization` pattern in one place.
+
+**refresh/route.ts service-role client — architecturally correct:**
+- Line 69-72: `createClient(url, SUPABASE_SERVICE_ROLE_KEY)` for `news_cache` writes. `news_cache` is a globally shared table with no per-user RLS — service-role bypass is correct. This was explicitly preserved per the plan's B-6 note.
+
+---
+
+### Next.js & Railway Contracts: ✅ PASS
+
+- No Next.js `fetch` caching directives (`next: { revalidate }`, `cacheTag`, `Cache-Control`) introduced. `createNewsClient` is a pure client factory — no server-side caching semantics.
+- The Bearer-token pattern is entirely a Supabase client configuration matter; it does not involve Next.js route caching.
+- No Railway/FastAPI contracts affected — this phase touches only the Next.js news routes and the client factory.
+
+---
+
+### Silent Breakage Test: ✅ PASS
+
+- All 4 route files now import `createNewsClient` from `@/lib/newsQueryService`. Verified:
+  - `articles/[article_id]/state/route.ts:11` — `import { createNewsClient } from '@/lib/newsQueryService'` ✅
+  - `macro/route.ts:13` — `import { createNewsClient } from '@/lib/newsQueryService'` ✅
+  - `portfolio/route.ts:20` — `import { createNewsClient } from '@/lib/newsQueryService'` ✅
+  - `refresh/route.ts:15` — `import { createNewsClient } from '@/lib/newsQueryService'` ✅
+- `lib/supabase/server.ts` unchanged (contains only `createServerClient`-based `createClient()` for cookie-jar sessions — correct, not touched by this phase).
+- No orphaned imports. No broken type references.
+- `tsc --noEmit` — clean (verified by `pnpm test` compilation step).
+- `pnpm test lib/newsQueryService.test.ts` — **29/29 tests passing** ✅
+- `pnpm test app/api/news/` — **13/13 tests passing** (macro: 6, portfolio: 7) ✅
+- `pnpm test` — 58 files, **573 tests passing** ✅
+
+---
+
+### ⚠️ MINOR DOCUMENTATION DISCREPANCY (non-blocking)
+
+**Finding:** `REFACTOR_LOG.md` Phase 5a entry states: "MODIFIED: `lib/supabase/server.ts` — added documentation comment..."
+
+**Reality:** `lib/supabase/server.ts` was NOT modified in commit `616bb5a`. The file remains a 28-line `createServerClient`-based server client factory with no Bearer-token comment. The Bearer-token workaround note was instead added to `lib/newsQueryService.ts` (lines 15-20), which is the correct location for the architecture note since that is where `createNewsClient` lives.
+
+**Analysis:** The documentation note exists and is accurate — it is simply in the service file rather than `server.ts` as the plan specified. Since the note is in `newsQueryService.ts` (where the `createNewsClient` factory is implemented), it is arguably more contextually appropriate than a note on the generic `createServerClient` factory. However, it deviates from the plan's stated location.
+
+**Severity: Low** — The note is present and correct. The plan's specified location (`server.ts`) was not followed, but the note serves its purpose in the actual implementation file.
+
+---
+
+### Verdict: **PASS**
+
+**No critical flaws detected.**
+
+Phase 5 is a clean normalization of the Bearer-token Supabase client pattern across all news routes:
+- All 4 route files now use `createNewsClient(bearerToken)` consistently.
+- The `refresh/route.ts` correctly preserves a separate service-role client for `news_cache` writes (no per-user RLS).
+- `createNewsClient` is a proper factory — creates a fresh client per call, no caching.
+- The Bearer-token workaround architecture note is present and accurate (located in `newsQueryService.ts` rather than `server.ts` as the plan specified — non-blocking discrepancy).
+- No Next.js caching contracts affected. No Railway/FastAPI contracts affected.
+- All 573 tests pass; `tsc --noEmit` is clean.
+
+**Block Criterion Check:** ✅ VERIFIED
+- Pre-execution grep identified exactly 4 news route files constructing Supabase clients directly with inline `Authorization` headers.
+- `refresh/route.ts` was correctly identified as having two clients: a user-scoped Bearer client (normalized) and a service-role client (preserved inline per architecture requirement).
+- The `lib/newsQueryService.ts` note documents the B-6 constraint correctly.
+
+---
+
 ## Pending Phases (not yet audited)
 
-- Phase 5 — News Route Auth Pattern Normalization
 - Phase 6 — Railway ↔ Next.js Contract Formalization
 - Phase 7 — SessionContext Split into AuthContext + UIContext
