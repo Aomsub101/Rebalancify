@@ -20,6 +20,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.95.2
         version: 5.95.2(react@19.2.4)
+      '@thednp/dommatrix':
+        specifier: ^3.0.4
+        version: 3.0.4
       autoprefixer:
         specifier: 10.4.27
         version: 10.4.27(postcss@8.5.8)
@@ -2226,6 +2229,10 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
+
+  '@thednp/dommatrix@3.0.4':
+    resolution: {integrity: sha512-xpKtQZqFOuAPfQDbePIh9f48YKfmULV7z9C+anPBSHiOG4P+T3ct7Cx2AZOoUeXbxiDkz7SONANy1bB7p2uysg==}
+    engines: {node: '>=20', pnpm: '>=8.6.0'}
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -7224,6 +7231,8 @@ snapshots:
   '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
+
+  '@thednp/dommatrix@3.0.4': {}
 
   '@tybys/wasm-util@0.10.1':
     dependencies:

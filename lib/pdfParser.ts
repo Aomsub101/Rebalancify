@@ -1,8 +1,6 @@
 // DOMMatrix polyfill — required for pdf-parse in Node.js (server-side bundling)
-// @napi-rs/canvas provides a DOMMatrix implementation for Node.js
-// DOMMatrix polyfill — required for pdf-parse in Node.js (server-side bundling)
-// @napi-rs/canvas provides a DOMMatrix implementation for Node.js
-import { DOMMatrix } from '@napi-rs/canvas'
+// @thednp/dommatrix is a pure JS DOMMatrix implementation — no native binaries needed
+import DOMMatrix from '@thednp/dommatrix'
 // @ts-ignore - DOMMatrix is needed by pdf-parse browser build at runtime
 globalThis.DOMMatrix = DOMMatrix
 
