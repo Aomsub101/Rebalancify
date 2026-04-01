@@ -1,47 +1,44 @@
 """
 api/index.py
-FastAPI entrypoint for Python serverless functions on Vercel.
-
-Wraps individual handlers (optimize.handler, backfill_debut.handler)
-as FastAPI route handlers under experimentalServices.
+FastAPI entrypoint for the Railway-deployed Python microservice.
+All routes require X-API-Key authentication.
+Only accessible via Next.js proxy — not directly from the browser.
 """
 
-import json
-from typing import Any
+import os
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import backfill_debut, optimize
 
-app = FastAPI()
+app = FastAPI(
+    title="Rebalancify Optimization API",
+    description="Portfolio optimization and asset backfill — internal Railway service",
+)
+
+# ---------------------------------------------------------------------------
+# CORS — restrict to Next.js origins only (no wildcard)
+# ---------------------------------------------------------------------------
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",      # local development
+    "https://rebalancify.vercel.app",  # production
+]
 
 
-@app.post("/optimize")
-async def do_optimize(request: Request) -> Response:
-    """Proxy to optimize.handler."""
-    body = await request.body()
-    event: dict[str, Any] = {
-        "method": "POST",
-        "body": body.decode("utf-8") if body else "{}",
-    }
-    result = optimize.handler(event)
-    status_code = result.get("statusCode", 200)
-    body_out = result.get("body", "{}")
-    headers = result.get("headers", {"Content-Type": "application/json"})
-    return JSONResponse(content=json.loads(body_out), status_code=status_code, headers=headers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["POST"],
+    allow_headers=["X-API-Key", "Content-Type"],
+)
 
 
-@app.post("/backfill_debut")
-async def do_backfill_debut(request: Request) -> Response:
-    """Proxy to backfill_debut.handler."""
-    body = await request.body()
-    event: dict[str, Any] = {
-        "method": "POST",
-        "body": body.decode("utf-8") if body else "{}",
-    }
-    result = backfill_debut.handler(event)
-    status_code = result.get("statusCode", 200)
-    body_out = result.get("body", "{}")
-    headers = result.get("headers", {"Content-Type": "application/json"})
-    return JSONResponse(content=json.loads(body_out), status_code=status_code, headers=headers)
+# ---------------------------------------------------------------------------
+# Mount routers
+# ---------------------------------------------------------------------------
+
+app.include_router(optimize.router)
+app.include_router(backfill_debut.router)

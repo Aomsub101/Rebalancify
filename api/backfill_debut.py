@@ -1,11 +1,10 @@
 """
 python/backfill_debut.py
-Python serverless function (Vercel) for backfilling assets.market_debut_date.
+FastAPI router for backfilling assets.market_debut_date.
+Deployable to Railway (or any uvicorn-hostable environment).
 
-Runtime: @vercel/python
-
-This is called by the holdings API route when an asset is missing market_debut_date.
-Uses yfinance 5-year price series — same logic as api/optimize.py lines 187–194.
+DO NOT modify fetch_and_upsert_debut() or BackfillError — these are
+out of scope for this migration.
 """
 
 import json
@@ -15,46 +14,82 @@ from datetime import date
 from typing import Any
 
 import yfinance as yf
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from supabase import Client, create_client
 
+# ---------------------------------------------------------------------------
+# API Key dependency (shared across routers — imported by index.py)
+# ---------------------------------------------------------------------------
 
-def handler(event: dict[str, Any]) -> dict[str, Any]:
+API_KEY_HEADER = "X-API-Key"
+
+
+async def verify_api_key(api_key: str = Depends(API_KEY_HEADER)) -> str:
     """
-    Vercel Python serverless function entry point.
-    Handles POST /api/backfill_debut.
+    Validate the X-API-Key header against the RAILWAY_API_KEY env var.
+    Raises 401 if missing or mismatched.
     """
-    if event.get("method", "").upper() != "POST":
-        return {"statusCode": 405, "body": json.dumps({"error": {"code": "METHOD_NOT_ALLOWED", "message": "Only POST is supported"}})}
+    expected = os.environ.get("RAILWAY_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=500, detail="RAILWAY_API_KEY not configured on server")
+    if api_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return api_key
 
-    try:
-        body = json.loads(event.get("body", "{}"))
-    except json.JSONDecodeError:
-        return {"statusCode": 400, "body": json.dumps({"error": {"code": "INVALID_JSON", "message": "Invalid JSON in request body"}})}
 
-    ticker = body.get("ticker", "").strip()
+# ---------------------------------------------------------------------------
+# Pydantic request model
+# ---------------------------------------------------------------------------
+
+
+class BackfillRequest(BaseModel):
+    ticker: str
+
+
+# ---------------------------------------------------------------------------
+# FastAPI router
+# ---------------------------------------------------------------------------
+
+router = APIRouter(prefix="/backfill_debut", tags=["backfill_debut"])
+
+
+@router.post("/", dependencies=[Depends(verify_api_key)])
+async def backfill_debut_endpoint(body: BackfillRequest) -> dict[str, Any]:
+    """
+    POST /backfill_debut
+    Receives { ticker: string }, fetches yfinance 5-year history,
+    extracts earliest date, upserts into assets.market_debut_date.
+    Returns { ticker, market_debut_date }.
+    """
+    ticker = body.ticker.strip()
     if not ticker:
-        return {"statusCode": 400, "body": json.dumps({"error": {"code": "INVALID_VALUE", "message": "ticker is required"}})}
+        raise HTTPException(status_code=400, detail={"error": {"code": "INVALID_VALUE", "message": "ticker is required"}})
 
     ticker_upper = ticker.upper()
 
     supabase_url = os.environ.get("SUPABASE_URL")
     service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not supabase_url or not service_role_key:
-        return {"statusCode": 500, "body": json.dumps({"error": {"code": "CONFIG_ERROR", "message": "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"}})}
+        raise HTTPException(
+            status_code=500,
+            detail={"error": {"code": "CONFIG_ERROR", "message": "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"}},
+        )
 
     supabase: Client = create_client(supabase_url, service_role_key)
 
     try:
         debut_date = fetch_and_upsert_debut(supabase, ticker_upper)
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"ticker": ticker_upper, "market_debut_date": debut_date}),
-        }
+        return {"ticker": ticker_upper, "market_debut_date": debut_date}
     except BackfillError as e:
-        return {"statusCode": 422, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": {"code": "BACKFILL_ERROR", "message": e.message}})}
+        raise HTTPException(status_code=422, detail={"error": {"code": "BACKFILL_ERROR", "message": e.message}})
     except Exception as e:
-        return {"statusCode": 500, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": {"code": "INTERNAL_ERROR", "message": str(e)}})}
+        raise HTTPException(status_code=500, detail={"error": {"code": "INTERNAL_ERROR", "message": str(e)}})
+
+
+# ---------------------------------------------------------------------------
+# Core backfill logic (out of scope — do not modify)
+# ---------------------------------------------------------------------------
 
 
 def fetch_and_upsert_debut(supabase: Client, ticker_upper: str) -> str:

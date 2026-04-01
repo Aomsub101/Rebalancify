@@ -1,11 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "experimentalServices": {
-    "python-api": {
-      "entrypoint": "api/index.py",
-      "routePrefix": "/opt"
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/drift-digest",

@@ -1,7 +1,12 @@
 """
 python/optimize.py
-Python serverless function for portfolio mean-variance optimization.
-Runtime: @vercel/python (configured in vercel.json)
+FastAPI router for portfolio mean-variance optimization.
+Deployable to Railway (or any uvicorn-hostable environment).
+
+DO NOT modify the math functions:
+  min_variance_portfolio, max_sharpe_portfolio, target_risk_portfolio,
+  project_3m, run_optimization, fetch_prices, calculate_annualized_metrics,
+  truncate_to_common_length — these are out of scope for this migration.
 
 Implements:
   F11-R3  Dynamic Truncation
@@ -16,13 +21,14 @@ Implements:
 import json
 import math
 import os
-import sys
 from datetime import date, timedelta
 from typing import Any
 
 import numpy as np
 import scipy.optimize as opt
 import yfinance as yf
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from supabase import Client, create_client
 
 # ---------------------------------------------------------------------------
@@ -33,82 +39,74 @@ CACHE_TTL_HOURS = 24
 RF = 0.04  # Risk-free rate for Max Sharpe (4% annual)
 
 # ---------------------------------------------------------------------------
-# Vercel Python handler
+# API Key dependency (shared across routers — imported by index.py)
 # ---------------------------------------------------------------------------
 
-def handler(event: dict[str, Any]) -> dict[str, Any]:
-    """
-    Vercel Python serverless function entry point.
-    Handles POST /api/optimize.
-    """
-    if event.get("method", "").upper() != "POST":
-        return {"statusCode": 405, "body": json.dumps({"error": {"code": "METHOD_NOT_ALLOWED", "message": "Only POST is supported"}})}
+API_KEY_HEADER = "X-API-Key"
 
-    try:
-        body = json.loads(event.get("body", "{}"))
-    except json.JSONDecodeError:
-        return {"statusCode": 400, "body": json.dumps({"error": {"code": "INVALID_JSON", "message": "Invalid JSON in request body"}})}
 
-    tickers = body.get("tickers", [])
+async def verify_api_key(api_key: str = Depends(API_KEY_HEADER)) -> str:
+    """
+    Validate the X-API-Key header against the RAILWAY_API_KEY env var.
+    Raises 401 if missing or mismatched.
+    """
+    expected = os.environ.get("RAILWAY_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=500, detail="RAILWAY_API_KEY not configured on server")
+    if api_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return api_key
+
+
+# ---------------------------------------------------------------------------
+# Pydantic request model
+# ---------------------------------------------------------------------------
+
+
+class OptimizeRequest(BaseModel):
+    tickers: list[str]
+
+
+# ---------------------------------------------------------------------------
+# FastAPI router
+# ---------------------------------------------------------------------------
+
+router = APIRouter(prefix="/optimize", tags=["optimize"])
+
+
+@router.post("/", dependencies=[Depends(verify_api_key)])
+async def optimize_endpoint(body: OptimizeRequest) -> dict[str, Any]:
+    """
+    POST /optimize
+    Receives { tickers: string[] }, runs mean-variance optimization,
+    returns F11-R14 response shape.
+    """
+    tickers = body.tickers
 
     # Validate: at least 2 tickers
     if not isinstance(tickers, list) or len(tickers) < 2:
-        return {
-            "statusCode": 422,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "error": {
-                    "code": "OPTIMIZATION_ERROR",
-                    "message": "At least 2 tickers are required",
-                }
-            }),
-        }
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "OPTIMIZATION_ERROR", "message": "At least 2 tickers are required"}},
+        )
 
     # Validate: all tickers are strings
     if not all(isinstance(t, str) for t in tickers):
-        return {
-            "statusCode": 422,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "error": {
-                    "code": "OPTIMIZATION_ERROR",
-                    "message": "All tickers must be strings",
-                }
-            }),
-        }
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "OPTIMIZATION_ERROR", "message": "All tickers must be strings"}},
+        )
 
     # Deduplicate
     tickers = list(dict.fromkeys(tickers))
 
     try:
         result = run_optimization(tickers)
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(result),
-        }
+        return result
     except OptimizationError as e:
-        return {
-            "statusCode": 422,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "error": {
-                    "code": "OPTIMIZATION_ERROR",
-                    "message": e.message,
-                }
-            }),
-        }
+        raise HTTPException(status_code=422, detail={"error": {"code": "OPTIMIZATION_ERROR", "message": e.message}})
     except Exception as e:
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": str(e),
-                }
-            }),
-        }
+        raise HTTPException(status_code=500, detail={"error": {"code": "INTERNAL_ERROR", "message": str(e)}})
 
 
 # ---------------------------------------------------------------------------
