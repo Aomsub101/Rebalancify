@@ -144,9 +144,12 @@
 
 ## Phase 6 — Railway ↔ Next.js Contract Formalization ✅ NO-OP
 
+**Status:** ✅ COMPLETED
+
 **Completed:** 2026-04-01
 
 **Pre-Check:** Verified `lib/types/simulation.ts` fields exactly match Railway `api/optimize.py` `run_optimization()` return value:
+
 - `strategies.not_to_lose/expected/optimistic.weights` → `Record<string, number>` ✅
 - `strategies.*.return_3m` → `string` ✅
 - `strategies.*.range` → `string` ✅
@@ -155,6 +158,7 @@
 - `metadata.lookback_months` → `number` ✅
 
 **Additional verification:**
+
 - `app/api/optimize/route.ts` — pure streaming passthrough, no caching, no transformation ✅
 - Components (`SimulationResultsTable`, `StrategyCard`, `SiloDetailView`) import from `lib/types/simulation.ts` ✅
 - `app/api/silos/[silo_id]/holdings/route.ts` — confirmed false positive (uses `computeDriftState` from `lib/drift`, not simulation types)
@@ -167,7 +171,9 @@
 
 ## Phase 7 — SessionContext Split into AuthContext + UIContext
 
-**Status:** In Progress (Phase 7b)
+**Status:** ✅ COMPLETED
+
+**Completed:** 2026-04-01
 
 ### Phase 7a — Scaffold UIContext + mount in providers ✅
 
@@ -217,6 +223,7 @@
 - NOTE: `SessionContext` retains full interface (auth + UI state) for backward compatibility with remaining call sites. `useAuth()` from AuthContext is the preferred import for new code.
 
 **Architecture achieved:**
+
 - `AuthContext` — auth state: `session`, `user`, `profile`, `refreshProfile` (with silos invalidation), `isLoading`
 - `UIContext` — UI state: `showUSD`, `setShowUSD`, `onboarded`, `setOnboarded`, `progressBannerDismissed`, `setProgressBannerDismissed` + `useSiloCount()` hook
 - `SessionContext` — kept as-is for backward compatibility (still mounted in providers, still works with existing call sites)
@@ -234,10 +241,10 @@ All 3 sub-phases (7a, 7b, 7c) complete. SessionContext successfully split.
 
 **Summary of Phase 7:**
 
-| Sub-phase | What was done |
-|-----------|--------------|
-| 7a | Created `UIContext` (`useUI()`, `useSiloCount()`) + mounted in providers |
-| 7b | Created `AuthContext`; migrated TopBar, OnboardingGate, OnboardingModal, overview page |
-| 7c | Added `queryClient.invalidateQueries` to `AuthContext.refreshProfile()`; migrated ProgressBanner and Sidebar to `useAuth()` |
+| Sub-phase | What was done                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 7a        | Created `UIContext` (`useUI()`, `useSiloCount()`) + mounted in providers                                                    |
+| 7b        | Created `AuthContext`; migrated TopBar, OnboardingGate, OnboardingModal, overview page                                          |
+| 7c        | Added `queryClient.invalidateQueries` to `AuthContext.refreshProfile()`; migrated ProgressBanner and Sidebar to `useAuth()` |
 
 **Remaining note:** `SessionContext` still mounted in providers with full interface for backward compatibility. Components can migrate to `useAuth()` / `useUI()` at leisure — no urgency.
