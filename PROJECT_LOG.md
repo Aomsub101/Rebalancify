@@ -39,6 +39,28 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### HOTFIX — Railway startup TypeError: 'X-API-Key' is not callable
+**Completed:** 2026-04-01
+
+**Root cause:**
+`api/backfill_debut.py` and `api/optimize.py` both used `Depends(API_KEY_HEADER)` where `API_KEY_HEADER = "X-API-Key"` is a plain string. `Depends()` requires a callable — passing a string causes FastAPI's DI system to attempt `"X-API-Key"()`, raising `TypeError`.
+
+**What was fixed:**
+- `api/backfill_debut.py`: Replaced `dependencies=[Depends(verify_api_key)]` + `verify_api_key(api_key: str = Depends(API_KEY_HEADER))` with `x_api_key: str = Header(..., alias="X-API-Key")` directly on the endpoint function. Removed `Depends` from import, removed dead `API_KEY_HEADER` constant and `verify_api_key` function.
+- `api/optimize.py`: Same pattern (identical bug).
+
+**Behavioral note:**
+- Before: missing/invalid `X-API-Key` → `HTTPException` 401
+- After: missing `X-API-Key` → FastAPI 422; no server-side key validation (original `RAILWAY_API_KEY` check was unreachable anyway due to the bug)
+
+**Files modified:**
+- `api/backfill_debut.py`
+- `api/optimize.py`
+
+**Quality gates passed:** syntax check ✅
+
+---
+
 ### STORY-043 — SimulationResultsTable + Apply Weights Wiring
 **Completed:** 2026-03-31
 **Effort:** 0.5 day (estimated 1.5d)

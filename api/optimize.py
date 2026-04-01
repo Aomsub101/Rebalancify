@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import scipy.optimize as opt
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from supabase import Client, create_client
 
@@ -37,26 +37,6 @@ from supabase import Client, create_client
 
 CACHE_TTL_HOURS = 24
 RF = 0.04  # Risk-free rate for Max Sharpe (4% annual)
-
-# ---------------------------------------------------------------------------
-# API Key dependency (shared across routers — imported by index.py)
-# ---------------------------------------------------------------------------
-
-API_KEY_HEADER = "X-API-Key"
-
-
-async def verify_api_key(api_key: str = Depends(API_KEY_HEADER)) -> str:
-    """
-    Validate the X-API-Key header against the RAILWAY_API_KEY env var.
-    Raises 401 if missing or mismatched.
-    """
-    expected = os.environ.get("RAILWAY_API_KEY")
-    if not expected:
-        raise HTTPException(status_code=500, detail="RAILWAY_API_KEY not configured on server")
-    if api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return api_key
-
 
 # ---------------------------------------------------------------------------
 # Pydantic request model
@@ -74,8 +54,11 @@ class OptimizeRequest(BaseModel):
 router = APIRouter(prefix="/optimize", tags=["optimize"])
 
 
-@router.post("/", dependencies=[Depends(verify_api_key)])
-async def optimize_endpoint(body: OptimizeRequest) -> dict[str, Any]:
+@router.post("/")
+async def optimize_endpoint(
+    body: OptimizeRequest,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+) -> dict[str, Any]:
     """
     POST /optimize
     Receives { tickers: string[] }, runs mean-variance optimization,

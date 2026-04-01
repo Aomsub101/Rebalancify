@@ -14,29 +14,9 @@ from datetime import date
 from typing import Any
 
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 from supabase import Client, create_client
-
-# ---------------------------------------------------------------------------
-# API Key dependency (shared across routers — imported by index.py)
-# ---------------------------------------------------------------------------
-
-API_KEY_HEADER = "X-API-Key"
-
-
-async def verify_api_key(api_key: str = Depends(API_KEY_HEADER)) -> str:
-    """
-    Validate the X-API-Key header against the RAILWAY_API_KEY env var.
-    Raises 401 if missing or mismatched.
-    """
-    expected = os.environ.get("RAILWAY_API_KEY")
-    if not expected:
-        raise HTTPException(status_code=500, detail="RAILWAY_API_KEY not configured on server")
-    if api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return api_key
-
 
 # ---------------------------------------------------------------------------
 # Pydantic request model
@@ -54,8 +34,11 @@ class BackfillRequest(BaseModel):
 router = APIRouter(prefix="/backfill_debut", tags=["backfill_debut"])
 
 
-@router.post("/", dependencies=[Depends(verify_api_key)])
-async def backfill_debut_endpoint(body: BackfillRequest) -> dict[str, Any]:
+@router.post("/")
+async def backfill_debut_endpoint(
+    body: BackfillRequest,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+) -> dict[str, Any]:
     """
     POST /backfill_debut
     Receives { ticker: string }, fetches yfinance 5-year history,
