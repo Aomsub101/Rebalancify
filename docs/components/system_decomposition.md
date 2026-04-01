@@ -1,3 +1,5 @@
+    
+
 # DOCS/components/system_decomposition.md — As-Built Component Decomposition
 
 ## Purpose
@@ -248,6 +250,38 @@ A v2.0 RAG-powered qualitative research layer. It stores user-supplied LLM API k
 
 ---
 
+## Component 10 — Portfolio Projection & Optimization Engine
+
+**Technical Role**
+
+The portfolio simulation and mean-variance optimization layer. It runs Markowitz-style optimization (scipy.optimize) on a silo of 2+ assets, fetching up to 5 years of daily price history via yfinance, caching results in Supabase, and returning three strategy allocations (minimum volatility, maximum Sharpe ratio, target risk) with 3-month forward projections. The computational engine runs as a Python FastAPI microservice hosted on Railway, proxied through Next.js so that API keys and external calls never reach the browser. A companion backfill endpoint populates `assets.market_debut_date` from yfinance 5-year history, enabling the 3-month minimum age constraint.
+
+**Belongs To**
+
+- EPIC-11 — Portfolio Projection & Optimization (STORY-040 through STORY-043)
+
+**Key Responsibilities**
+
+- FastAPI microservice on Railway (`api/index.py`) with CORS locked to Next.js origins
+- Optimization endpoint (`POST /optimize`) — cache-first price fetch, dynamic truncation, annualized μ/Σ, three scipy.optimize strategies, 3-month projection math, F11-R14 response shape
+- Backfill endpoint (`POST /backfill_debut`) — yfinance 5yr history → `assets.market_debut_date` upsert
+- Next.js proxy route (`app/api/optimize/route.ts`) forwarding to Railway with `X-API-Key` auth
+- `useSimulationConstraints` hook — min 2 assets, min 3 months trading history per asset
+- Simulation UI — `SimulateScenariosButton`, `SimulationResultsTable`, `StrategyCard`, `TruncationWarning`, `SimulationDisclaimer`
+- Apply Weights wiring — pre-fills target weight inputs in the SiloDetailPage weight editor
+- Stale-while-revalidate cache in `asset_historical_data` (Supabase, 24h TTL)
+
+**Interaction With Other Components**
+
+- Consumed by SiloDetailPage — the simulation UI is embedded below the holdings table
+- Reads price series from `asset_historical_data` (Supabase, populated by yfinance)
+- Reads `market_debut_date` from `assets` table to enforce 3-month minimum age constraint
+- Writes back `market_debut_date` to `assets` when a new ticker's price series is first fetched
+- Writes optimized `historical_prices` to `asset_historical_data` (global read cache, no RLS)
+- Apply Weights feeds into Component 2's target weight editor (local React state only, no API call)
+
+---
+
 ## Component 9 — PWA & Cross-Cutting UI
 
 **Technical Role**
@@ -295,6 +329,9 @@ Browser (User)
   │     ├── SiloDetailPage
   │     │     ├── Portfolio Data Layer (Component 2)
   │     │     ├── Market Data (Component 5)
+  │     │     ├── Portfolio Projection & Optimization Engine (Component 10)
+  │     │     │     ├── SimulateScenariosButton → Railway FastAPI /optimize
+  │     │     │     └── SimulationResultsTable → Apply Weights → Component 2 weight editor
   │     │     │
   │     │     └── RebalanceButton → RebalancePage
   │     │               └── Rebalancing Engine (Component 3)
@@ -332,18 +369,19 @@ Browser (User)
 
 ## Component to Epic Mapping Summary
 
-| Component | Epics | Phase |
-|---|---|---|
-| Component 1 — Auth & Foundation | EPIC-01 | 0 |
-| Component 2 — Portfolio Data Layer | EPIC-02, EPIC-05 | 1, 4 |
-| Component 3 — Rebalancing Engine | EPIC-03 | 2 |
-| Component 4 — Broker Integration Layer | EPIC-04, EPIC-10 | 3, 9 |
-| Component 5 — Market Data & Pricing | EPIC-02, EPIC-04, EPIC-05, EPIC-07 (shared) | 1–7 |
-| Component 6 — News Feed | EPIC-06 | 5 |
-| Component 7 — Asset Discovery | EPIC-07, EPIC-05 (partial) | 4, 6 |
-| Component 8 — AI Research Hub | EPIC-09 | 8 |
-| Component 9 — PWA & Cross-Cutting UI | EPIC-08 | 7 |
+| Component                               | Epics                                       | Phase |
+| --------------------------------------- | ------------------------------------------- | ----- |
+| Component 1 — Auth & Foundation        | EPIC-01                                     | 0     |
+| Component 2 — Portfolio Data Layer     | EPIC-02, EPIC-05                            | 1, 4  |
+| Component 3 — Rebalancing Engine       | EPIC-03                                     | 2     |
+| Component 4 — Broker Integration Layer | EPIC-04, EPIC-10                            | 3, 9  |
+| Component 5 — Market Data & Pricing    | EPIC-02, EPIC-04, EPIC-05, EPIC-07 (shared) | 1–7  |
+| Component 6 — News Feed                | EPIC-06                                     | 5     |
+| Component 7 — Asset Discovery          | EPIC-07, EPIC-05 (partial)                  | 4, 6  |
+| Component 8 — AI Research Hub          | EPIC-09                                     | 8     |
+| Component 9 — PWA & Cross-Cutting UI   | EPIC-08                                     | 7     |
+| Component 10 — Portfolio Projection & Optimization Engine | EPIC-11                                     | 11    |
 
 ---
 
-*Last derived from: stories/epics.md, docs/prd/features/F1–F5, docs/architecture/00-system-overview.md, docs/architecture/04-component-tree.md*
+*Last derived from: stories/epics.md, docs/prd/features/F1–F5, F11, docs/architecture/00-system-overview.md, docs/architecture/04-component-tree.md*
