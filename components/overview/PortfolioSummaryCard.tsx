@@ -19,28 +19,59 @@ interface Props {
   /** Aggregated drift assets from all silos (for unique asset count). Pass empty array while loading. */
   allDriftAssets: DriftAsset[]
   showUSD: boolean
-  /** Map of base_currency → rate_to_usd (number) */
+  /** Map of base_currency to rate_to_usd (number). */
   fxRates: Record<string, number>
+  targetCurrency: string
 }
 
-export function PortfolioSummaryCard({ silos, allDriftAssets, showUSD, fxRates }: Props) {
-  // Total portfolio value — sum all silos, optionally convert to USD
-  const totalValue = silos.reduce((sum, s) => {
-    const val = parseFloat(s.total_value)
-    if (!Number.isFinite(val)) return sum
-    const rate = showUSD ? (fxRates[s.base_currency] ?? 1) : 1
-    return sum + val * rate
+function convertAmount(
+  amount: number,
+  sourceCurrency: string,
+  targetCurrency: string,
+  fxRates: Record<string, number>,
+): number {
+  if (!Number.isFinite(amount)) return 0
+
+  const normalizedSource = sourceCurrency.toUpperCase()
+  const normalizedTarget = targetCurrency.toUpperCase()
+
+  if (normalizedSource === normalizedTarget) {
+    return amount
+  }
+
+  const sourceRate = fxRates[normalizedSource] ?? (normalizedSource === 'USD' ? 1 : undefined)
+  const targetRate = fxRates[normalizedTarget] ?? (normalizedTarget === 'USD' ? 1 : undefined)
+
+  if (sourceRate === undefined || targetRate === undefined || targetRate === 0) {
+    return 0
+  }
+
+  return (amount * sourceRate) / targetRate
+}
+
+export function PortfolioSummaryCard({
+  silos,
+  allDriftAssets,
+  showUSD,
+  fxRates,
+  targetCurrency,
+}: Props) {
+  // Normalize every silo into one display currency before summing.
+  const totalValue = silos.reduce((sum, silo) => {
+    const rawValue = parseFloat(silo.total_value)
+    if (!Number.isFinite(rawValue)) return sum
+    return sum + convertAmount(rawValue, silo.base_currency, targetCurrency, fxRates)
   }, 0)
 
-  const displayCurrency = showUSD ? 'USD' : (silos[0]?.base_currency ?? 'USD')
-
+  const displayCurrency = targetCurrency
   const activeSiloCount = silos[0]?.active_silo_count ?? silos.length
   const siloLimit = silos[0]?.silo_limit ?? 5
 
   // Unique assets: count distinct asset_ids across all drift responses
-  const uniqueAssetCount = new Set(allDriftAssets.map((a) => a.asset_id)).size
+  const uniqueAssetCount = new Set(allDriftAssets.map((asset) => asset.asset_id)).size
 
   const isEmpty = totalValue === 0
+  const showsConvertedTotal = !isEmpty && silos.some((silo) => silo.base_currency !== displayCurrency)
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -54,14 +85,16 @@ export function PortfolioSummaryCard({ silos, allDriftAssets, showUSD, fxRates }
         </div>
         <p className="text-2xl font-mono font-semibold text-foreground tabular-nums">
           {isEmpty
-            ? '—'
-            : `${showUSD ? 'USD' : displayCurrency} ${totalValue.toLocaleString('en-US', {
+            ? '-'
+            : `${displayCurrency} ${totalValue.toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}`}
         </p>
-        {showUSD && !isEmpty && (
-          <p className="text-xs text-muted-foreground mt-0.5">Converted to USD</p>
+        {showsConvertedTotal && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {showUSD ? 'Converted to USD' : `Converted to ${displayCurrency}`}
+          </p>
         )}
       </div>
 
