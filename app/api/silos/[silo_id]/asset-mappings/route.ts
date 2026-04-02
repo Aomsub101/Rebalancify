@@ -3,6 +3,42 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchPrice } from '@/lib/priceService'
 
 type RouteContext = { params: Promise<{ silo_id: string }> }
+type PlatformType = 'alpaca' | 'bitkub' | 'innovestx' | 'schwab' | 'webull' | 'manual'
+type PriceSource = 'finnhub' | 'coingecko' | 'alpaca' | 'bitkub'
+
+function normalizeAssetForSilo(
+  platformType: PlatformType,
+  assetType: string,
+  requestedPriceSource: string,
+): { holdingSource: string; priceSource: PriceSource } {
+  if (platformType === 'manual') {
+    return {
+      holdingSource: 'manual',
+      priceSource: requestedPriceSource as PriceSource,
+    }
+  }
+
+  if (platformType === 'alpaca') {
+    return { holdingSource: 'alpaca_sync', priceSource: 'alpaca' }
+  }
+
+  if (platformType === 'bitkub') {
+    return { holdingSource: 'bitkub_sync', priceSource: 'bitkub' }
+  }
+
+  if (platformType === 'innovestx') {
+    return {
+      holdingSource: 'innovestx_sync',
+      priceSource: assetType === 'crypto' ? 'coingecko' : 'finnhub',
+    }
+  }
+
+  if (platformType === 'schwab') {
+    return { holdingSource: 'schwab_sync', priceSource: 'finnhub' }
+  }
+
+  return { holdingSource: 'webull_sync', priceSource: 'finnhub' }
+}
 
 export async function GET(_request: Request, { params }: RouteContext) {
   const supabase = await createClient()
@@ -73,7 +109,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   // 3. Verify silo ownership
   const { data: silo, error: siloError } = await supabase
     .from('silos')
-    .select('id')
+    .select('id, platform_type')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
@@ -86,12 +122,18 @@ export async function POST(request: Request, { params }: RouteContext) {
     )
   }
 
+  const normalized = normalizeAssetForSilo(
+    silo.platform_type as PlatformType,
+    asset_type as string,
+    price_source as string,
+  )
+
   // 4. Upsert asset (global registry — unique on ticker + price_source)
   const assetPayload: Record<string, unknown> = {
     ticker: (ticker as string).toUpperCase(),
     name,
     asset_type,
-    price_source,
+    price_source: normalized.priceSource,
   }
   if (coingecko_id !== undefined) {
     assetPayload.coingecko_id = coingecko_id
@@ -143,7 +185,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   const { error: holdingsErr } = await supabase
     .from('holdings')
     .upsert(
-      { silo_id, asset_id: asset.id, quantity: '0.00000000', source: 'manual' },
+      { silo_id, asset_id: asset.id, quantity: '0.00000000', source: normalized.holdingSource },
       { onConflict: 'silo_id,asset_id' }
     )
   if (holdingsErr) {
@@ -176,12 +218,12 @@ export async function POST(request: Request, { params }: RouteContext) {
   // 7. Best-effort price cache population (AC6) — failure must not block 201
   try {
     await fetchPrice(
-      supabase,
-      asset.id,
-      asset.ticker as string,
-      price_source as 'finnhub' | 'coingecko',
-      coingecko_id as string | undefined
-    )
+        supabase,
+        asset.id,
+        asset.ticker as string,
+        normalized.priceSource,
+        coingecko_id as string | undefined
+      )
   } catch {
     // Intentionally silent — price cache failure does not block mapping creation
   }

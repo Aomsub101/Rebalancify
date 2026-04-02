@@ -95,6 +95,8 @@ function updateChain() {
 function deleteEqChain() {
   const chain: Record<string, unknown> = { data: null, error: null }
   chain.eq = vi.fn().mockReturnValue(chain)
+  chain.in = vi.fn().mockReturnValue(chain)
+  chain.neq = vi.fn().mockReturnValue(chain)
   return chain
 }
 
@@ -235,21 +237,33 @@ describe('POST /api/silos/:silo_id/sync', () => {
         }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockReturnValue(Promise.resolve({ error: null })) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockReturnValue(Promise.resolve({ error: null })),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         const delChain: Record<string, unknown> = {}
         delChain.eq = vi.fn().mockReturnValue(delChain)
         delChain.neq = vi.fn().mockReturnValue(delChain)
+        delChain.in = vi.fn().mockReturnValue(delChain)
         Object.assign(delChain, Promise.resolve({ error: null }))
         const upsertRes = Promise.resolve({ error: null })
         const updateRes: Record<string, unknown> = {}
         updateRes.eq = vi.fn().mockReturnValue(updateRes)
         Object.assign(updateRes, Promise.resolve({ error: null }))
         return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
           upsert: vi.fn().mockReturnValue(upsertRes),
           delete: vi.fn().mockReturnValue(delChain),
           update: vi.fn().mockReturnValue(updateRes),
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
         }
       }
       return {}
@@ -307,12 +321,23 @@ describe('POST /api/silos/:silo_id/sync', () => {
         return { select: vi.fn().mockReturnValue(assetQuery) }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
           delete: holdingsDelete,
           upsert: holdingsUpsert,
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
         }
       }
       return {}
@@ -368,8 +393,22 @@ describe('POST /api/silos/:silo_id/sync', () => {
       }
       if (table === 'holdings') {
         return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
           delete: holdingsDelete,
           upsert: holdingsUpsert,
+        }
+      }
+      if (table === 'asset_mappings') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
         }
       }
       return {}
@@ -425,7 +464,11 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
         return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         const selectChain = selectEqChain([])
@@ -449,6 +492,12 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
       }
       if (table === 'price_cache') {
         return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       return {}
     }
@@ -559,7 +608,11 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
         return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         const upd: Record<string, unknown> = {}
@@ -568,8 +621,20 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
         const delChain: Record<string, unknown> = {}
         delChain.eq = vi.fn().mockReturnValue(delChain)
         delChain.neq = vi.fn().mockReturnValue(delChain)
+        delChain.in = vi.fn().mockReturnValue(delChain)
         Object.assign(delChain, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(delChain),
+          update: vi.fn().mockReturnValue(upd),
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       return {}
     }
@@ -709,12 +774,23 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
         return { select: vi.fn().mockReturnValue(selectEqChain({ id: 'asset-aapl' })) }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
           delete: holdingsDelete,
           upsert: vi.fn().mockResolvedValue({ error: null }),
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
         }
       }
       return {}
@@ -773,7 +849,11 @@ describe('POST /api/silos/:silo_id/sync — Webull branch', () => {
         return { select: vi.fn().mockReturnValue(mb), insert: vi.fn().mockReturnValue(ins) }
       }
       if (table === 'asset_mappings') {
-        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       if (table === 'holdings') {
         const upd: Record<string, unknown> = {}
@@ -782,8 +862,20 @@ describe('POST /api/silos/:silo_id/sync — Webull branch', () => {
         const delChain: Record<string, unknown> = {}
         delChain.eq = vi.fn().mockReturnValue(delChain)
         delChain.neq = vi.fn().mockReturnValue(delChain)
+        delChain.in = vi.fn().mockReturnValue(delChain)
         Object.assign(delChain, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(delChain),
+          update: vi.fn().mockReturnValue(upd),
+        }
+      }
+      if (table === 'target_weights') {
+        return {
+          select: vi.fn().mockReturnValue(selectEqChain([])),
+          delete: vi.fn().mockReturnValue(deleteEqChain()),
+        }
       }
       return {}
     }

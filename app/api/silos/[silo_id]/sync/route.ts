@@ -54,6 +54,12 @@ type HoldingWithAssetPriceSource = {
   assets: { price_source: string } | Array<{ price_source: string }> | null
 }
 
+type TargetWeightWithAssetPriceSource = {
+  asset_id: string
+  weight_pct: string
+  assets: { price_source: string } | Array<{ price_source: string }> | null
+}
+
 function unauthorized() {
   return NextResponse.json(
     { error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } },
@@ -81,16 +87,6 @@ async function fetchAlpaca<T>(
   return res.json() as Promise<T>
 }
 
-async function clearSiloHoldings(
-  supabase: SupabaseClient,
-  siloId: string,
-) {
-  await supabase
-    .from('holdings')
-    .delete()
-    .eq('silo_id', siloId)
-}
-
 async function clearNonSourceHoldings(
   supabase: SupabaseClient,
   siloId: string,
@@ -103,23 +99,74 @@ async function clearNonSourceHoldings(
     .neq('source', source)
 }
 
-async function pruneSyncedHoldingsByPriceSource(
+function joinedPriceSource(
+  assets: { price_source: string } | Array<{ price_source: string }> | null
+): string | null {
+  if (Array.isArray(assets)) return assets[0]?.price_source ?? null
+  return assets?.price_source ?? null
+}
+
+async function retainWeightedPlaceholdersAndPruneStaleRows(
   supabase: SupabaseClient,
   siloId: string,
   source: string,
   priceSource: string,
+  syncedAt: string,
   currentAssetIds: string[],
 ) {
-  const { data } = await supabase
+  const retainedAssetIds = new Set(currentAssetIds)
+
+  const { data: targetWeightRows } = await supabase
+    .from('target_weights')
+    .select('asset_id, weight_pct, assets!inner(price_source)')
+    .eq('silo_id', siloId)
+    .eq('assets.price_source', priceSource)
+
+  for (const row of (targetWeightRows ?? []) as TargetWeightWithAssetPriceSource[]) {
+    if (joinedPriceSource(row.assets) !== priceSource) continue
+    if (Number(row.weight_pct) <= 0) continue
+    if (retainedAssetIds.has(row.asset_id)) continue
+
+    await supabase
+      .from('holdings')
+      .upsert(
+        {
+          silo_id: siloId,
+          asset_id: row.asset_id,
+          quantity: '0.00000000',
+          source,
+          last_updated_at: syncedAt,
+        },
+        { onConflict: 'silo_id,asset_id' },
+      )
+
+    retainedAssetIds.add(row.asset_id)
+  }
+
+  const { data: holdingRows } = await supabase
     .from('holdings')
     .select('asset_id, assets!inner(price_source)')
     .eq('silo_id', siloId)
     .eq('source', source)
     .eq('assets.price_source', priceSource)
 
-  const staleAssetIds = ((data ?? []) as HoldingWithAssetPriceSource[])
-    .map((row) => row.asset_id)
-    .filter((assetId) => !currentAssetIds.includes(assetId))
+  const { data: mappingRows } = await supabase
+    .from('asset_mappings')
+    .select('asset_id, assets!inner(price_source)')
+    .eq('silo_id', siloId)
+    .eq('assets.price_source', priceSource)
+
+  const staleAssetIds = Array.from(new Set([
+    ...((holdingRows ?? []) as HoldingWithAssetPriceSource[])
+      .filter((row) => joinedPriceSource(row.assets) === priceSource)
+      .map((row) => row.asset_id),
+    ...((mappingRows ?? []) as HoldingWithAssetPriceSource[])
+      .filter((row) => joinedPriceSource(row.assets) === priceSource)
+      .map((row) => row.asset_id),
+    ...((targetWeightRows ?? []) as TargetWeightWithAssetPriceSource[])
+      .filter((row) => joinedPriceSource(row.assets) === priceSource)
+      .map((row) => row.asset_id),
+  ])).filter((assetId) => !retainedAssetIds.has(assetId))
 
   if (staleAssetIds.length === 0) return
 
@@ -128,6 +175,18 @@ async function pruneSyncedHoldingsByPriceSource(
     .delete()
     .eq('silo_id', siloId)
     .eq('source', source)
+    .in('asset_id', staleAssetIds)
+
+  await supabase
+    .from('asset_mappings')
+    .delete()
+    .eq('silo_id', siloId)
+    .in('asset_id', staleAssetIds)
+
+  await supabase
+    .from('target_weights')
+    .delete()
+    .eq('silo_id', siloId)
     .in('asset_id', staleAssetIds)
 }
 
@@ -239,11 +298,12 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   // 4. Remove any legacy finnhub/manual holdings for this silo before fresh sync
   // (upsert only updates quantity — old source values would cause duplicate rows)
-  await clearSiloHoldings(supabase, silo_id)
+  await clearNonSourceHoldings(supabase, silo_id, 'alpaca_sync')
 
   // 5. Upsert each position: find or create asset → find or create asset_mapping → upsert holding
   let holdingsUpdated = 0
   const syncedAt = new Date().toISOString()
+  const syncedAssetIds: string[] = []
 
   for (const pos of positions) {
     const assetType = pos.asset_class === 'crypto' ? 'crypto' : 'stock'
@@ -279,6 +339,8 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
       assetId = newAsset.id
     }
 
+    syncedAssetIds.push(assetId)
+
     // Ensure asset_mapping exists for this silo (best-effort, ignore conflict)
     await supabase
       .from('asset_mappings')
@@ -310,6 +372,15 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
       // non-fatal — stale cache remains
     }
   }
+
+  await retainWeightedPlaceholdersAndPruneStaleRows(
+    supabase,
+    silo_id,
+    'alpaca_sync',
+    'alpaca',
+    syncedAt,
+    syncedAssetIds,
+  )
 
   // 5. Store account cash on silos.cash_balance (post-migration 23)
   await supabase
@@ -442,9 +513,10 @@ async function syncBitkub(
 
   const syncedAt = new Date().toISOString()
   let holdingsUpdated = 0
+  const syncedAssetIds: string[] = []
 
   // 4. Remove any legacy holdings for this silo before fresh sync
-  await clearSiloHoldings(supabase, siloId)
+  await clearNonSourceHoldings(supabase, siloId, 'bitkub_sync')
 
   // 5. Upsert each non-zero crypto holding
   for (const h of holdings) {
@@ -474,6 +546,8 @@ async function syncBitkub(
       if (assetErr || !newAsset) continue
       assetId = newAsset.id
     }
+
+    syncedAssetIds.push(assetId)
 
     // Ensure asset_mapping exists (best-effort, ignore conflict)
     await supabase
@@ -516,6 +590,15 @@ async function syncBitkub(
         )
     }
   }
+
+  await retainWeightedPlaceholdersAndPruneStaleRows(
+    supabase,
+    siloId,
+    'bitkub_sync',
+    'bitkub',
+    syncedAt,
+    syncedAssetIds,
+  )
 
   // 5. Store THB cash balance on silos.cash_balance (post-migration 23)
   await supabase
@@ -708,11 +791,12 @@ async function syncInnovestx(
       }
     }
 
-    await pruneSyncedHoldingsByPriceSource(
+    await retainWeightedPlaceholdersAndPruneStaleRows(
       supabase,
       siloId,
       'innovestx_sync',
       'finnhub',
+      syncedAt,
       syncedEquityAssetIds,
     )
   } else {
@@ -825,11 +909,12 @@ async function syncInnovestx(
       }
     }
 
-    await pruneSyncedHoldingsByPriceSource(
+    await retainWeightedPlaceholdersAndPruneStaleRows(
       supabase,
       siloId,
       'innovestx_sync',
       'coingecko',
+      syncedAt,
       syncedDigitalAssetIds,
     )
   } else {
@@ -941,9 +1026,10 @@ async function syncSchwab(
 
   const syncedAt = new Date().toISOString()
   let holdingsUpdated = 0
+  const syncedAssetIds: string[] = []
 
   // 5. Remove any legacy holdings for this silo before fresh sync
-  await clearSiloHoldings(supabase, siloId)
+  await clearNonSourceHoldings(supabase, siloId, 'schwab_sync')
 
   // 6. Upsert each position: find/create asset → ensure asset_mapping → upsert holding
   for (const pos of positions) {
@@ -972,6 +1058,8 @@ async function syncSchwab(
       if (assetErr || !newAsset) continue
       assetId = newAsset.id
     }
+
+    syncedAssetIds.push(assetId)
 
     // Ensure asset_mapping exists for this silo (best-effort, ignore conflict)
     await supabase
@@ -1003,6 +1091,15 @@ async function syncSchwab(
       // non-fatal — stale cache remains
     }
   }
+
+  await retainWeightedPlaceholdersAndPruneStaleRows(
+    supabase,
+    siloId,
+    'schwab_sync',
+    'finnhub',
+    syncedAt,
+    syncedAssetIds,
+  )
 
   // 6. AC3: update silo.last_synced_at
   await supabase
@@ -1093,9 +1190,10 @@ async function syncWebull(
   const positions = parseWebullPositions(rawPositions)
   const syncedAt = new Date().toISOString()
   let holdingsUpdated = 0
+  const syncedAssetIds: string[] = []
 
   // 4. Remove any legacy holdings for this silo before fresh sync
-  await clearSiloHoldings(supabase, siloId)
+  await clearNonSourceHoldings(supabase, siloId, 'webull_sync')
 
   for (const pos of positions) {
     const { data: existingAsset } = await supabase
@@ -1123,6 +1221,8 @@ async function syncWebull(
       if (assetErr || !newAsset) continue
       assetId = newAsset.id
     }
+
+    syncedAssetIds.push(assetId)
 
     await supabase
       .from('asset_mappings')
@@ -1153,6 +1253,15 @@ async function syncWebull(
       // non-fatal — stale cache remains
     }
   }
+
+  await retainWeightedPlaceholdersAndPruneStaleRows(
+    supabase,
+    siloId,
+    'webull_sync',
+    'finnhub',
+    syncedAt,
+    syncedAssetIds,
+  )
 
   // 4. AC2: update silo.last_synced_at
   await supabase
