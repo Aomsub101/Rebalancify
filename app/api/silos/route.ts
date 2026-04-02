@@ -3,35 +3,44 @@ import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { checkSiloLimit, buildSiloResponse } from '@/lib/silos'
 import { fetchPrice } from '@/lib/priceService'
+import { cashCurrencyForPlatform, convertAmount } from '@/lib/currency'
 
 const VALID_PLATFORM_TYPES = ['alpaca', 'bitkub', 'innovestx', 'schwab', 'webull', 'manual'] as const
 
 async function computeSiloTotalValue(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  siloId: string,
-  cashBalance: string
+  silo: { id: string; cash_balance: string; base_currency: string; platform_type: string }
 ): Promise<string> {
   const { data: holdingsData } = await supabase
     .from('holdings')
     .select('asset_id, quantity, assets!inner(ticker, price_source)')
-    .eq('silo_id', siloId)
+    .eq('silo_id', silo.id)
 
   const rows = holdingsData ?? []
   if (rows.length === 0) {
-    return cashBalance
+    return silo.cash_balance ?? '0'
   }
 
   const assetIds = rows.map(h => h.asset_id)
 
   const { data: priceData } = await supabase
     .from('price_cache')
-    .select('asset_id, price')
+    .select('asset_id, price, currency')
     .in('asset_id', assetIds)
 
-  const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
+  const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, {
+    price: p.price as string,
+    currency: (p.currency as string | null) ?? 'USD',
+  }]))
+
+  const currencies = new Set<string>([silo.base_currency, cashCurrencyForPlatform(silo.platform_type, silo.base_currency)])
+  for (const priceRow of priceData ?? []) {
+    currencies.add((priceRow.currency as string | null) ?? 'USD')
+  }
 
   for (const row of rows) {
-    if (priceMap.has(row.asset_id) && priceMap.get(row.asset_id) !== '0') continue
+    const existing = priceMap.get(row.asset_id)
+    if (existing && existing.price !== '0') continue
     const assetRaw = (row as { assets?: unknown }).assets
     const asset = Array.isArray(assetRaw) ? assetRaw[0] : assetRaw
     const ticker = (asset as { ticker?: string } | null)?.ticker
@@ -46,18 +55,40 @@ async function computeSiloTotalValue(
 
     try {
       const livePrice = await fetchPrice(supabase, row.asset_id, ticker, priceSource)
-      priceMap.set(row.asset_id, livePrice.price)
+      priceMap.set(row.asset_id, { price: livePrice.price, currency: livePrice.currency ?? 'USD' })
+      currencies.add(livePrice.currency ?? 'USD')
     } catch {
       // fall back to cached price or zero
     }
   }
 
+  const rateToUsdMap: Record<string, string | number> = { USD: 1 }
+  const fxTable = supabase.from('fx_rates') as { select?: (columns: string) => { in: (column: string, values: string[]) => Promise<{ data: Array<{ currency: string; rate_to_usd: string }> | null }> } } | undefined
+  if (fxTable?.select) {
+    const { data: fxRows } = await fxTable
+      .select('currency, rate_to_usd')
+      .in('currency', Array.from(currencies))
+
+    for (const row of fxRows ?? []) {
+      rateToUsdMap[row.currency] = row.rate_to_usd
+    }
+  }
+
   const holdingsValue = rows.reduce((sum, h) => {
-    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
-    return sum.plus(new Decimal(h.quantity as string).mul(price))
+    const quote = priceMap.get(h.asset_id)
+    const price = new Decimal(quote?.price ?? '0')
+    const nativeValue = new Decimal(h.quantity as string).mul(price)
+    return sum.plus(convertAmount(nativeValue, quote?.currency ?? 'USD', silo.base_currency, rateToUsdMap))
   }, new Decimal(0))
 
-  return holdingsValue.plus(new Decimal(cashBalance ?? '0')).toFixed(8)
+  const convertedCash = convertAmount(
+    silo.cash_balance ?? '0',
+    cashCurrencyForPlatform(silo.platform_type, silo.base_currency),
+    silo.base_currency,
+    rateToUsdMap,
+  )
+
+  return holdingsValue.plus(convertedCash).toFixed(8)
 }
 
 export async function GET() {
@@ -91,7 +122,12 @@ export async function GET() {
   const activeSiloCount = silos.length
 
   const totalValues = await Promise.all(
-    silos.map(silo => computeSiloTotalValue(supabase, silo.id, silo.cash_balance ?? '0'))
+    silos.map(silo => computeSiloTotalValue(supabase, {
+      id: silo.id,
+      cash_balance: silo.cash_balance ?? '0',
+      base_currency: silo.base_currency,
+      platform_type: silo.platform_type,
+    }))
   )
 
   const response = silos.map((silo, i) => {

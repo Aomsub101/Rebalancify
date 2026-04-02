@@ -3,6 +3,7 @@ import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { computeDriftState } from '@/lib/drift'
 import { fetchPrice } from '@/lib/priceService'
+import { cashCurrencyForPlatform, convertAmount } from '@/lib/currency'
 
 type Params = Promise<{ silo_id: string }>
 
@@ -20,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   // 1. Verify silo ownership + fetch cash_balance
   const { data: silo } = await supabase
     .from('silos')
-    .select('id, drift_threshold, platform_type, cash_balance')
+    .select('id, drift_threshold, platform_type, cash_balance, base_currency')
     .eq('id', silo_id)
     .eq('user_id', user.id)
     .eq('is_active', true)
@@ -65,12 +66,22 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     .eq('silo_id', silo_id)
 
   // Build lookup maps
-  const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
+  const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, {
+    price: p.price as string,
+    currency: (p.currency as string | null) ?? 'USD',
+  }]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
+  const currencies = new Set<string>([silo.base_currency, cashCurrencyForPlatform(silo.platform_type, silo.base_currency)])
+  for (const row of priceData ?? []) {
+    currencies.add((row.currency as string | null) ?? 'USD')
+  }
 
   // On-demand price fetch for uncached assets — prevents $0.00 values when sync failed to cache
   // (non-fatal: missing prices default to 0, same as before, but now we attempt to fill the gap)
-  const uncachedIds = rows.map(h => h.asset_id).filter(id => !priceMap.has(id) || priceMap.get(id) === '0')
+  const uncachedIds = rows.map(h => h.asset_id).filter(id => {
+    const quote = priceMap.get(id)
+    return !quote || quote.price === '0'
+  })
   for (const assetId of uncachedIds) {
     const h = rows.find(r => r.asset_id === assetId)
     if (!h) continue
@@ -78,7 +89,8 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     try {
       const priceSource = (asset.price_source ?? 'finnhub') as 'finnhub' | 'coingecko' | 'alpaca' | 'bitkub'
       const result = await fetchPrice(supabase, assetId, asset.ticker, priceSource)
-      priceMap.set(assetId, result.price)
+      priceMap.set(assetId, { price: result.price, currency: result.currency ?? 'USD' })
+      currencies.add(result.currency ?? 'USD')
       // Persist so subsequent requests hit the cache
       await supabase.from('price_cache').upsert(
         { asset_id: assetId, price: result.price, currency: result.currency ?? 'USD', source: result.source },
@@ -89,12 +101,30 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     }
   }
 
+  const rateToUsdMap: Record<string, string | number> = { USD: 1 }
+  const fxTable = supabase.from('fx_rates') as { select?: (columns: string) => { in: (column: string, values: string[]) => Promise<{ data: Array<{ currency: string; rate_to_usd: string }> | null }> } } | undefined
+  if (fxTable?.select) {
+    const { data: fxRows } = await fxTable
+      .select('currency, rate_to_usd')
+      .in('currency', Array.from(currencies))
+
+    for (const row of fxRows ?? []) {
+      rateToUsdMap[row.currency] = row.rate_to_usd
+    }
+  }
+
   // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
   // cash_balance now comes from the silos table (post-migration 23), not per-holding sums
-  const cashBalance = new Decimal(silo.cash_balance as string ?? '0')
+  const cashBalance = convertAmount(
+    silo.cash_balance as string ?? '0',
+    cashCurrencyForPlatform(silo.platform_type, silo.base_currency),
+    silo.base_currency,
+    rateToUsdMap,
+  )
   const holdingsValue = rows.reduce((sum, h) => {
-    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
-    return sum.plus(new Decimal(h.quantity as string).mul(price))
+    const quote = priceMap.get(h.asset_id)
+    const nativeValue = new Decimal(h.quantity as string).mul(new Decimal(quote?.price ?? '0'))
+    return sum.plus(convertAmount(nativeValue, quote?.currency ?? 'USD', silo.base_currency, rateToUsdMap))
   }, new Decimal(0))
   const totalValue = holdingsValue.plus(cashBalance)
 
@@ -102,7 +132,8 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   const now = Date.now()
   const holdings = rows.map(h => {
     const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; created_at?: string; market_debut_date?: string | null }
-    const price = new Decimal(priceMap.get(h.asset_id) ?? '0')
+    const quote = priceMap.get(h.asset_id)
+    const price = convertAmount(quote?.price ?? '0', quote?.currency ?? 'USD', silo.base_currency, rateToUsdMap)
     const qty = new Decimal(h.quantity as string)
     const currentValue = qty.mul(price)
     const currentWeightPct = totalValue.gt(0)
@@ -120,7 +151,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
       name: asset.name,
       asset_type: asset.asset_type,
       quantity: h.quantity,
-      current_price: priceMap.get(h.asset_id) ?? '0.00000000',
+      current_price: price.toFixed(8),
       current_value: currentValue.toFixed(8),
       current_weight_pct: parseFloat(currentWeightPct.toFixed(3)),
       target_weight_pct: parseFloat(targetWeightPct.toFixed(3)),

@@ -9,7 +9,6 @@ import {
   Settings2,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
@@ -53,10 +52,7 @@ export function Sidebar() {
   const displayName = profileData?.display_name ?? profile?.display_name ?? null
 
   async function handleSignOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut({ scope: 'local' })
-    router.replace('/login')
-    router.refresh()
+    window.location.assign('/auth/signout')
   }
 
   function handleNavClick(href: string) {

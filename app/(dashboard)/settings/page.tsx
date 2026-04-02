@@ -7,7 +7,6 @@ import { toast } from 'sonner'
 import { AlertCircle, CheckCircle2, Eye, EyeOff, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LLM_PROVIDERS, getDefaultModel, getModelsForProvider } from '@/lib/llmProviders'
-import { createClient } from '@/lib/supabase/client'
 
 interface ProfileData {
   id: string
@@ -153,14 +152,7 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
-    const supabase = createClient()
-    const { error } = await supabase.auth.signOut({ scope: 'local' })
-    if (error) {
-      setSaveError(error.message)
-      return
-    }
-    router.replace('/login')
-    router.refresh()
+    window.location.assign('/auth/signout')
   }
 
   async function handleSaveDisplayName() {
