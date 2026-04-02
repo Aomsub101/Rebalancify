@@ -21,7 +21,7 @@ Implements:
 import json
 import math
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -131,8 +131,11 @@ def fetch_prices(tickers: list[str], supabase: Client) -> dict[str, list[dict]]:
 
         cache_fresh = False
         if row and row.data:
-            last_updated = date.fromisoformat(row.data["last_updated"].replace("Z", ""))
-            age_hours = (date.today() - last_updated).total_seconds() / 3600
+            last_updated_raw = row.data["last_updated"].replace("Z", "+00:00")
+            last_updated = datetime.fromisoformat(last_updated_raw)
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=timezone.utc)
+            age_hours = (datetime.now(timezone.utc) - last_updated).total_seconds() / 3600
             if age_hours < CACHE_TTL_HOURS:
                 cache_fresh = True
                 prices_by_ticker[ticker_upper] = row.data["historical_prices"]
