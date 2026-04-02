@@ -96,6 +96,13 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
   })
 
   it('returns 201 with asset_id, mapping_id, ticker on success', async () => {
+    const assetUpsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: { id: ASSET_ID, ticker: 'AAPL' }, error: null }),
+      }),
+    })
+    const holdingsUpsert = vi.fn().mockResolvedValue({ error: null })
+
     mockFrom
       // 1. silo ownership check
       .mockReturnValueOnce({
@@ -103,7 +110,7 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({ data: { id: SILO_ID }, error: null }),
+                single: vi.fn().mockResolvedValue({ data: { id: SILO_ID, platform_type: 'manual' }, error: null }),
               }),
             }),
           }),
@@ -111,11 +118,7 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
       })
       // 2. upsert asset
       .mockReturnValueOnce({
-        upsert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { id: ASSET_ID, ticker: 'AAPL' }, error: null }),
-          }),
-        }),
+        upsert: assetUpsert,
       })
       // 3. check existing mapping → none
       .mockReturnValueOnce({
@@ -139,7 +142,7 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
       })
       // 5. holdings upsert (best-effort)
       .mockReturnValueOnce({
-        upsert: vi.fn().mockResolvedValue({ error: null }),
+        upsert: holdingsUpsert,
       })
 
     const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/asset-mappings`, {
@@ -152,6 +155,14 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
     expect(body.asset_id).toBe(ASSET_ID)
     expect(body.mapping_id).toBe(MAPPING_ID)
     expect(body.ticker).toBe('AAPL')
+    expect(assetUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'AAPL', price_source: 'finnhub' }),
+      { onConflict: 'ticker,price_source' },
+    )
+    expect(holdingsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ silo_id: SILO_ID, asset_id: ASSET_ID, source: 'manual' }),
+      { onConflict: 'silo_id,asset_id' },
+    )
   })
 
   it('returns 409 ASSET_MAPPING_EXISTS when mapping already exists', async () => {
@@ -162,7 +173,7 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
           eq: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({ data: { id: SILO_ID }, error: null }),
+                single: vi.fn().mockResolvedValue({ data: { id: SILO_ID, platform_type: 'manual' }, error: null }),
               }),
             }),
           }),
@@ -206,5 +217,67 @@ describe('POST /api/silos/[silo_id]/asset-mappings', () => {
     })
     const res = await POST(req, makeParams())
     expect(res.status).toBe(400)
+  })
+
+  it('normalizes Alpaca assets to alpaca price_source and alpaca_sync placeholder holdings', async () => {
+    const assetUpsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({ data: { id: ASSET_ID, ticker: 'AAPL' }, error: null }),
+      }),
+    })
+    const holdingsUpsert = vi.fn().mockResolvedValue({ error: null })
+
+    mockFrom
+      .mockReturnValueOnce({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({ data: { id: SILO_ID, platform_type: 'alpaca' }, error: null }),
+              }),
+            }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        upsert: assetUpsert,
+      })
+      .mockReturnValueOnce({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        insert: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { id: MAPPING_ID, asset_id: ASSET_ID }, error: null,
+            }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        upsert: holdingsUpsert,
+      })
+
+    const req = new NextRequest(`http://localhost/api/silos/${SILO_ID}/asset-mappings`, {
+      method: 'POST',
+      body: postBody({ price_source: 'finnhub' }),
+    })
+    const res = await POST(req, makeParams())
+
+    expect(res.status).toBe(201)
+    expect(assetUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'AAPL', price_source: 'alpaca' }),
+      { onConflict: 'ticker,price_source' },
+    )
+    expect(holdingsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ silo_id: SILO_ID, asset_id: ASSET_ID, source: 'alpaca_sync' }),
+      { onConflict: 'silo_id,asset_id' },
+    )
   })
 })
