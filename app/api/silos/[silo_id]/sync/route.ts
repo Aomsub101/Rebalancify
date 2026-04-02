@@ -46,6 +46,14 @@ interface AlpacaAccount {
   cash: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SupabaseClient = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
+
+type HoldingWithAssetPriceSource = {
+  asset_id: string
+  assets: { price_source: string } | Array<{ price_source: string }> | null
+}
+
 function unauthorized() {
   return NextResponse.json(
     { error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } },
@@ -71,6 +79,56 @@ async function fetchAlpaca<T>(
     throw new Error(`Alpaca ${path} returned ${res.status}`)
   }
   return res.json() as Promise<T>
+}
+
+async function clearSiloHoldings(
+  supabase: SupabaseClient,
+  siloId: string,
+) {
+  await supabase
+    .from('holdings')
+    .delete()
+    .eq('silo_id', siloId)
+}
+
+async function clearNonSourceHoldings(
+  supabase: SupabaseClient,
+  siloId: string,
+  source: string,
+) {
+  await supabase
+    .from('holdings')
+    .delete()
+    .eq('silo_id', siloId)
+    .neq('source', source)
+}
+
+async function pruneSyncedHoldingsByPriceSource(
+  supabase: SupabaseClient,
+  siloId: string,
+  source: string,
+  priceSource: string,
+  currentAssetIds: string[],
+) {
+  const { data } = await supabase
+    .from('holdings')
+    .select('asset_id, assets!inner(price_source)')
+    .eq('silo_id', siloId)
+    .eq('source', source)
+    .eq('assets.price_source', priceSource)
+
+  const staleAssetIds = ((data ?? []) as HoldingWithAssetPriceSource[])
+    .map((row) => row.asset_id)
+    .filter((assetId) => !currentAssetIds.includes(assetId))
+
+  if (staleAssetIds.length === 0) return
+
+  await supabase
+    .from('holdings')
+    .delete()
+    .eq('silo_id', siloId)
+    .eq('source', source)
+    .in('asset_id', staleAssetIds)
 }
 
 export async function POST(_req: NextRequest, { params }: { params: Params }) {
@@ -181,11 +239,7 @@ export async function POST(_req: NextRequest, { params }: { params: Params }) {
 
   // 4. Remove any legacy finnhub/manual holdings for this silo before fresh sync
   // (upsert only updates quantity — old source values would cause duplicate rows)
-  await supabase
-    .from('holdings')
-    .delete()
-    .eq('silo_id', silo_id)
-    .neq('source', 'alpaca_sync')
+  await clearSiloHoldings(supabase, silo_id)
 
   // 5. Upsert each position: find or create asset → find or create asset_mapping → upsert holding
   let holdingsUpdated = 0
@@ -298,9 +352,6 @@ interface BitkubWalletRaw {
   result: Record<string, number>
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SupabaseClient = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>
-
 async function syncBitkub(
   supabase: SupabaseClient,
   userId: string,
@@ -393,11 +444,7 @@ async function syncBitkub(
   let holdingsUpdated = 0
 
   // 4. Remove any legacy holdings for this silo before fresh sync
-  await supabase
-    .from('holdings')
-    .delete()
-    .eq('silo_id', siloId)
-    .neq('source', 'bitkub_sync')
+  await clearSiloHoldings(supabase, siloId)
 
   // 5. Upsert each non-zero crypto holding
   for (const h of holdings) {
@@ -533,6 +580,8 @@ async function syncInnovestx(
   const syncWarnings: string[] = []
   let totalHoldingsUpdated = 0
 
+  await clearNonSourceHoldings(supabase, siloId, 'innovestx_sync')
+
   // -------------------------------------------------------------------------
   // Equity branch (Settrade OAuth)
   // -------------------------------------------------------------------------
@@ -612,12 +661,7 @@ async function syncInnovestx(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const positions = parseSettradePortfolio(rawPortfolio as any)
 
-    // Remove any legacy holdings for this silo before equity sync
-    await supabase
-      .from('holdings')
-      .delete()
-      .eq('silo_id', siloId)
-      .neq('source', 'innovestx_sync')
+    const syncedEquityAssetIds: string[] = []
 
     for (const pos of positions) {
       const { data: existingAsset } = await supabase
@@ -640,6 +684,8 @@ async function syncInnovestx(
         assetId = newAsset.id
       }
 
+      syncedEquityAssetIds.push(assetId)
+
       await supabase
         .from('asset_mappings')
         .upsert(
@@ -661,6 +707,14 @@ async function syncInnovestx(
         // non-fatal — stale cache remains
       }
     }
+
+    await pruneSyncedHoldingsByPriceSource(
+      supabase,
+      siloId,
+      'innovestx_sync',
+      'finnhub',
+      syncedEquityAssetIds,
+    )
   } else {
     // AC5: equity creds missing → skip with warning (no crash)
     syncWarnings.push('Settrade equity credentials not configured — equity sync skipped')
@@ -723,12 +777,7 @@ async function syncInnovestx(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const digitalHoldings = parseInnovestxDigitalBalances(rawBalances as any)
 
-    // Remove any legacy holdings for this silo before digital asset sync
-    await supabase
-      .from('holdings')
-      .delete()
-      .eq('silo_id', siloId)
-      .neq('source', 'innovestx_sync')
+    const syncedDigitalAssetIds: string[] = []
 
     for (const h of digitalHoldings) {
       const { data: existingAsset } = await supabase
@@ -750,6 +799,8 @@ async function syncInnovestx(
         if (assetErr || !newAsset) continue
         assetId = newAsset.id
       }
+
+      syncedDigitalAssetIds.push(assetId)
 
       await supabase
         .from('asset_mappings')
@@ -773,6 +824,14 @@ async function syncInnovestx(
         // non-fatal — stale cache remains
       }
     }
+
+    await pruneSyncedHoldingsByPriceSource(
+      supabase,
+      siloId,
+      'innovestx_sync',
+      'coingecko',
+      syncedDigitalAssetIds,
+    )
   } else {
     // AC5: digital creds missing → skip with warning (no crash)
     syncWarnings.push('InnovestX Digital Asset credentials not configured — digital sync skipped')
@@ -884,11 +943,7 @@ async function syncSchwab(
   let holdingsUpdated = 0
 
   // 5. Remove any legacy holdings for this silo before fresh sync
-  await supabase
-    .from('holdings')
-    .delete()
-    .eq('silo_id', siloId)
-    .neq('source', 'schwab_sync')
+  await clearSiloHoldings(supabase, siloId)
 
   // 6. Upsert each position: find/create asset → ensure asset_mapping → upsert holding
   for (const pos of positions) {
@@ -1040,11 +1095,7 @@ async function syncWebull(
   let holdingsUpdated = 0
 
   // 4. Remove any legacy holdings for this silo before fresh sync
-  await supabase
-    .from('holdings')
-    .delete()
-    .eq('silo_id', siloId)
-    .neq('source', 'webull_sync')
+  await clearSiloHoldings(supabase, siloId)
 
   for (const pos of positions) {
     const { data: existingAsset } = await supabase
