@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Decimal from 'decimal.js'
 import { createClient } from '@/lib/supabase/server'
 import { checkSiloLimit, buildSiloResponse } from '@/lib/silos'
+import { fetchPrice } from '@/lib/priceService'
 
 const VALID_PLATFORM_TYPES = ['alpaca', 'bitkub', 'innovestx', 'schwab', 'webull', 'manual'] as const
 
@@ -12,7 +13,7 @@ async function computeSiloTotalValue(
 ): Promise<string> {
   const { data: holdingsData } = await supabase
     .from('holdings')
-    .select('asset_id, quantity')
+    .select('asset_id, quantity, assets!inner(ticker, price_source)')
     .eq('silo_id', siloId)
 
   const rows = holdingsData ?? []
@@ -28,6 +29,28 @@ async function computeSiloTotalValue(
     .in('asset_id', assetIds)
 
   const priceMap = new Map((priceData ?? []).map(p => [p.asset_id, p.price as string]))
+
+  for (const row of rows) {
+    if (priceMap.has(row.asset_id) && priceMap.get(row.asset_id) !== '0') continue
+    const assetRaw = (row as { assets?: unknown }).assets
+    const asset = Array.isArray(assetRaw) ? assetRaw[0] : assetRaw
+    const ticker = (asset as { ticker?: string } | null)?.ticker
+    const priceSource = (asset as { price_source?: string } | null)?.price_source as
+      | 'finnhub'
+      | 'coingecko'
+      | 'alpaca'
+      | 'bitkub'
+      | undefined
+
+    if (!ticker || !priceSource) continue
+
+    try {
+      const livePrice = await fetchPrice(supabase, row.asset_id, ticker, priceSource)
+      priceMap.set(row.asset_id, livePrice.price)
+    } catch {
+      // fall back to cached price or zero
+    }
+  }
 
   const holdingsValue = rows.reduce((sum, h) => {
     const price = new Decimal(priceMap.get(h.asset_id) ?? '0')

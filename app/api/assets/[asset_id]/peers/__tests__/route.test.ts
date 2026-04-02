@@ -4,10 +4,10 @@
  * Cases:
  *   1. Unauthenticated → 401
  *   2. Asset not found → 404
- *   3. Finnhub returns peers → 200 with ticker/name/price from DB
+ *   3. Finnhub returns peers → 200 with ticker/name and Finnhub live prices
  *   4. Finnhub throws (network error) → static fallback, 200
  *   5. Finnhub returns HTTP error → static fallback, 200
- *   6. Peer not in price_cache → current_price "0.00000000"
+ *   6. Finnhub quote unavailable → current_price falls back to cache or "0.00000000"
  *   7. Finnhub returns >8 peers → result capped at 8
  */
 
@@ -172,21 +172,18 @@ describe('GET /api/assets/:asset_id/peers', () => {
         }
       }
       if (table === 'price_cache') {
-        return chainSelectIn({
-          data: [
-            { asset_id: 'peer-1', price: '415.00000000' },
-            { asset_id: 'peer-2', price: '175.00000000' },
-          ],
-          error: null,
-        })
+        return chainSelectIn({ data: [], error: null })
       }
       return {}
     }
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ['MSFT', 'GOOGL', 'AAPL'], // AAPL is the queried ticker — should be excluded
-    } as Response)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ['MSFT', 'GOOGL', 'AAPL'], // AAPL is the queried ticker — should be excluded
+      } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ c: 415 }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ c: 175 }) } as Response)
 
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(200)
@@ -305,7 +302,7 @@ describe('GET /api/assets/:asset_id/peers', () => {
   // ---------------------------------------------------------------------------
   // 6. Peer not in price_cache → current_price defaults to "0.00000000"
   // ---------------------------------------------------------------------------
-  it('defaults current_price to "0.00000000" when no price_cache entry', async () => {
+  it('defaults current_price to "0.00000000" when Finnhub and price_cache both miss', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
 
     mockFromImpl = (table) => {
@@ -340,10 +337,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
       return {}
     }
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ['MSFT'],
-    } as Response)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ['MSFT'],
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+      } as Response)
 
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(200)
@@ -432,7 +434,7 @@ describe('GET /api/assets/:asset_id/peers', () => {
         }
       }
       if (table === 'price_cache') {
-        return chainSelectIn({ data: [{ asset_id: 'peer-1', price: '415.00000000' }], error: null })
+        return chainSelectIn({ data: [], error: null })
       }
       if (table === 'research_sessions') {
         return {
@@ -457,10 +459,15 @@ describe('GET /api/assets/:asset_id/peers', () => {
       return {}
     }
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ['MSFT'],
-    } as Response)
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ['MSFT'],
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ c: 415 }),
+      } as Response)
 
     const res = await GET(makeRequest(), makeParams())
     expect(res.status).toBe(200)

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Save } from 'lucide-react'
 import { SiloHeader } from '@/components/silo/SiloHeader'
@@ -18,6 +19,7 @@ import { formatNumber } from '@/lib/formatNumber'
 import type { SimulationResult } from '@/lib/types/simulation'
 import { SimulateScenariosButton } from '@/components/simulation/SimulateScenariosButton'
 import { SimulationResultsTable } from '@/components/simulation/SimulationResultsTable'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 interface SiloData {
   id: string
@@ -34,7 +36,9 @@ interface Props {
 }
 
 export function SiloDetailView({ silo }: Props) {
+  const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
   // Deduplication key — sorted comma-separated tickers of the last simulated composition
   const lastSimulatedKey = useRef<string>('')
@@ -175,9 +179,36 @@ export function SiloDetailView({ silo }: Props) {
   const isManual = silo.platform_type === 'manual'
   const driftThreshold = data?.drift_threshold ?? silo.drift_threshold
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/silos/${silo.id}`, {
+        method: 'DELETE',
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        throw new Error(body?.error?.message ?? 'Failed to delete silo')
+      }
+      return body
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['silos'] })
+      toast.success('Silo deleted')
+      router.replace('/silos')
+      router.refresh()
+    },
+    onError: (err: Error) => {
+      toast.error(err.message ?? 'Failed to delete silo')
+    },
+  })
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-      <SiloHeader silo={silo} onAddAsset={() => setModalOpen(true)} />
+      <SiloHeader
+        silo={silo}
+        onAddAsset={() => setModalOpen(true)}
+        onDelete={() => setDeleteOpen(true)}
+        isDeleting={deleteMutation.isPending}
+      />
 
       {isLoading && <LoadingSkeleton rows={5} />}
       {isError && <ErrorBanner message="Failed to load holdings — try refreshing." />}
@@ -251,6 +282,16 @@ export function SiloDetailView({ silo }: Props) {
       </footer>
 
       <AssetSearchModal siloId={silo.id} open={modalOpen} onOpenChange={setModalOpen} />
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete this silo?"
+        description="This removes the silo from your active list. Holdings and history stay preserved as inactive data."
+        confirmLabel="Delete silo"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   )
 }

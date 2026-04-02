@@ -48,6 +48,10 @@ interface ResearchSessionRow {
   created_at: string
 }
 
+interface FinnhubQuoteRow {
+  c?: number
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -159,7 +163,7 @@ export async function GET(
   }
 
   // -------------------------------------------------------------------------
-  // Step 5: Fetch prices from price_cache
+  // Step 5: Fetch prices from Finnhub first, then fall back to price_cache
   // -------------------------------------------------------------------------
   const peerAssetIds = peerAssets.map((a) => a.id)
 
@@ -168,10 +172,29 @@ export async function GET(
     .select('asset_id, price')
     .in('asset_id', peerAssetIds)
 
-  const priceMap = new Map<string, string>()
+  const cachedPriceMap = new Map<string, string>()
   for (const row of (priceRowsRaw ?? []) as PriceCacheRow[]) {
-    priceMap.set(row.asset_id, String(row.price))
+    cachedPriceMap.set(row.asset_id, String(row.price))
   }
+
+  const livePriceMap = new Map<string, string>()
+  await Promise.all(
+    peerAssets.map(async (asset) => {
+      try {
+        const res = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(asset.ticker)}&token=${FINNHUB_API_KEY}`,
+          { signal: AbortSignal.timeout(FINNHUB_TIMEOUT_MS) },
+        )
+        if (!res.ok) return
+        const quote = await res.json() as FinnhubQuoteRow
+        if (typeof quote.c !== 'number' || quote.c <= 0) return
+        const formatted = quote.c.toFixed(8)
+        livePriceMap.set(asset.id, formatted)
+      } catch {
+        // fall back to cache/default zero
+      }
+    }),
+  )
 
   // -------------------------------------------------------------------------
   // Step 6: Merge and return — preserve order from peerTickers
@@ -182,7 +205,7 @@ export async function GET(
     .map((ticker) => {
       const a = assetByTicker.get(ticker)
       if (!a) return null
-      const rawPrice = priceMap.get(a.id)
+      const rawPrice = livePriceMap.get(a.id) ?? cachedPriceMap.get(a.id)
       const current_price = rawPrice != null
         ? parseFloat(rawPrice).toFixed(8)
         : '0.00000000'

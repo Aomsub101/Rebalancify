@@ -71,6 +71,23 @@ export async function POST(request: Request): Promise<NextResponse> {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  if (tickers.length === 0) {
+    const { data: holdingsData } = await supabase
+      .from('holdings')
+      .select('assets!inner(ticker)')
+
+    const seenTickers = new Set<string>()
+    for (const row of holdingsData ?? []) {
+      const assetsRaw = (row as { assets?: unknown }).assets
+      const asset = Array.isArray(assetsRaw) ? assetsRaw[0] : assetsRaw
+      const ticker = (asset as { ticker?: string } | null)?.ticker?.trim()
+      if (ticker && !seenTickers.has(ticker)) {
+        seenTickers.add(ticker)
+        tickers.push(ticker)
+      }
+    }
+  }
+
   // -------------------------------------------------------------------------
   // AC-5: 15-minute rate-limit guard (per-user in-memory)
   // -------------------------------------------------------------------------
