@@ -3,6 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { buildProfileResponse } from '@/lib/profile'
 import { encrypt } from '@/lib/encryption'
 
+function invalidValue(message: string) {
+  return NextResponse.json(
+    { error: { code: 'INVALID_VALUE', message } },
+    { status: 400 },
+  )
+}
+
 export async function GET() {
   const supabase = await createClient()
 
@@ -46,20 +53,37 @@ export async function PATCH(request: Request) {
   }
 
   const allowed: Record<string, unknown> = {}
-  if ('display_name' in body) allowed.display_name = body.display_name
-  if ('show_usd_toggle' in body) allowed.show_usd_toggle = body.show_usd_toggle
+  if ('display_name' in body) {
+    if (body.display_name !== null && typeof body.display_name !== 'string') {
+      return invalidValue('display_name must be string or null')
+    }
+    allowed.display_name = body.display_name
+  }
+  if ('show_usd_toggle' in body) {
+    if (typeof body.show_usd_toggle !== 'boolean') {
+      return invalidValue('show_usd_toggle must be boolean')
+    }
+    allowed.show_usd_toggle = body.show_usd_toggle
+  }
   if ('drift_notif_channel' in body) {
     const channel = body.drift_notif_channel
     if (channel !== 'app' && channel !== 'email' && channel !== 'both') {
-      return NextResponse.json(
-        { error: { code: 'INVALID_VALUE', message: 'drift_notif_channel must be app | email | both' } },
-        { status: 400 },
-      )
+      return invalidValue('drift_notif_channel must be app | email | both')
     }
     allowed.drift_notif_channel = channel
   }
-  if ('onboarded' in body) allowed.onboarded = body.onboarded
-  if ('progress_banner_dismissed' in body) allowed.progress_banner_dismissed = body.progress_banner_dismissed
+  if ('onboarded' in body) {
+    if (typeof body.onboarded !== 'boolean') {
+      return invalidValue('onboarded must be boolean')
+    }
+    allowed.onboarded = body.onboarded
+  }
+  if ('progress_banner_dismissed' in body) {
+    if (typeof body.progress_banner_dismissed !== 'boolean') {
+      return invalidValue('progress_banner_dismissed must be boolean')
+    }
+    allowed.progress_banner_dismissed = body.progress_banner_dismissed
+  }
 
   // Alpaca credentials — STORY-009 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
   const encKey = process.env.ENCRYPTION_KEY
@@ -80,10 +104,7 @@ export async function PATCH(request: Request) {
   if ('alpaca_mode' in body) {
     const mode = body.alpaca_mode
     if (mode !== 'paper' && mode !== 'live') {
-      return NextResponse.json(
-        { error: { code: 'INVALID_VALUE', message: 'alpaca_mode must be paper | live' } },
-        { status: 400 },
-      )
+      return invalidValue('alpaca_mode must be paper | live')
     }
     allowed.alpaca_mode = mode
   }
@@ -157,8 +178,18 @@ export async function PATCH(request: Request) {
   }
 
   // LLM credentials — STORY-030 (CLAUDE.md Rule 4: encrypt before storage, never return plaintext)
-  if ('llm_provider' in body) allowed.llm_provider = body.llm_provider
-  if ('llm_model' in body) allowed.llm_model = body.llm_model
+  if ('llm_provider' in body) {
+    if (body.llm_provider !== null && typeof body.llm_provider !== 'string') {
+      return invalidValue('llm_provider must be string or null')
+    }
+    allowed.llm_provider = body.llm_provider
+  }
+  if ('llm_model' in body) {
+    if (body.llm_model !== null && typeof body.llm_model !== 'string') {
+      return invalidValue('llm_model must be string or null')
+    }
+    allowed.llm_model = body.llm_model
+  }
   if ('llm_key' in body && typeof body.llm_key === 'string' && body.llm_key.length > 0) {
     if (!encKey) {
       return NextResponse.json(

@@ -64,9 +64,11 @@ async function fetchFmpMovers(): Promise<{ gainers: TopMoverItem[]; losers: TopM
     const [gRes, lRes] = await Promise.all([
       fetch(`https://financialmodelingprep.com/api/v3/gainers?apikey=${FMP_API_KEY}`, {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        next: { revalidate: 60 },
       }),
       fetch(`https://financialmodelingprep.com/api/v3/losers?apikey=${FMP_API_KEY}`, {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        next: { revalidate: 60 },
       }),
     ])
 
@@ -124,11 +126,17 @@ async function fetchFinnhubMovers(): Promise<{ gainers: TopMoverItem[]; losers: 
         const [quoteRes, profileRes] = await Promise.all([
           fetch(
             `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`,
-            { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+            {
+              signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+              next: { revalidate: 60 },
+            },
           ),
           fetch(
             `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`,
-            { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+            {
+              signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+              next: { revalidate: 60 },
+            },
           ),
         ])
 
@@ -200,11 +208,17 @@ async function fetchCryptoMovers(): Promise<{ gainers: TopMoverItem[]; losers: T
     const [gRes, lRes] = await Promise.all([
       fetch(
         'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=price_change_percentage_24h_desc&per_page=20&page=1&sparkline=false&price_change_percentage=24h',
-        { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+        {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          next: { revalidate: 60 },
+        },
       ),
       fetch(
         'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=price_change_percentage_24h_asc&per_page=20&page=1&sparkline=false&price_change_percentage=24h',
-        { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+        {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          next: { revalidate: 60 },
+        },
       ),
     ])
 

@@ -7,7 +7,7 @@
  * AC-1: 5–8 peers from Finnhub /stock/peers
  * AC-2: Finnhub unavailable → sector_taxonomy.json fallback (no error exposed)
  * AC-3: Each peer includes ticker, name, current_price (from price_cache)
- * AC-4: No AiInsightTag field in v1.0 response
+ * AC-4: ai_insight_tag is omitted unless the user has LLM connected and cached research exists
  * AC-5: Any authenticated user can call this endpoint (assets/price_cache have USING(TRUE) RLS)
  */
 
@@ -112,7 +112,10 @@ export async function GET(
   try {
     const res = await fetch(
       `https://finnhub.io/api/v1/stock/peers?symbol=${encodeURIComponent(assetRow.ticker)}&token=${FINNHUB_API_KEY}`,
-      { signal: AbortSignal.timeout(FINNHUB_TIMEOUT_MS) },
+      {
+        signal: AbortSignal.timeout(FINNHUB_TIMEOUT_MS),
+        next: { revalidate: 60 },
+      },
     )
     if (res.ok) {
       const data: string[] = await res.json()
@@ -183,7 +186,10 @@ export async function GET(
       try {
         const res = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(asset.ticker)}&token=${FINNHUB_API_KEY}`,
-          { signal: AbortSignal.timeout(FINNHUB_TIMEOUT_MS) },
+          {
+            signal: AbortSignal.timeout(FINNHUB_TIMEOUT_MS),
+            next: { revalidate: 60 },
+          },
         )
         if (!res.ok) return
         const quote = await res.json() as FinnhubQuoteRow

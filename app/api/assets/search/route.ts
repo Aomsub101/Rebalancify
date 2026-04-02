@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const VALID_TYPES = ['stock', 'crypto'] as const
 type AssetType = typeof VALID_TYPES[number]
+const SEARCH_TIMEOUT_MS = 5_000
 
 interface FinnhubSearchResult {
   description: string
@@ -26,16 +27,18 @@ interface CoinGeckoSearchCoin {
 
 async function lookupAssetIds(
   supabase: SupabaseClient,
-  tickers: string[],
+  assets: Array<{ ticker: string; price_source: string }>,
 ): Promise<Map<string, string>> {
-  if (tickers.length === 0) return new Map()
+  if (assets.length === 0) return new Map()
+
+  const tickers = Array.from(new Set(assets.map((asset) => asset.ticker)))
   const { data } = await supabase
     .from('assets')
-    .select('id, ticker')
+    .select('id, ticker, price_source')
     .in('ticker', tickers)
   const map = new Map<string, string>()
-  for (const row of (data ?? []) as { id: string; ticker: string }[]) {
-    map.set(row.ticker, row.id)
+  for (const row of (data ?? []) as { id: string; ticker: string; price_source: string }[]) {
+    map.set(`${row.ticker}:${row.price_source}`, row.id)
   }
   return map
 }
@@ -92,6 +95,10 @@ async function searchStocks(q: string, supabase: SupabaseClient) {
   try {
     const searchRes = await fetch(
       `https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&exchange=US&token=${apiKey}`,
+      {
+        signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+        next: { revalidate: 60 },
+      },
     )
     if (!searchRes.ok) {
       return NextResponse.json(
@@ -115,6 +122,10 @@ async function searchStocks(q: string, supabase: SupabaseClient) {
       try {
         const quoteRes = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(item.symbol)}&token=${apiKey}`,
+          {
+            signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+            next: { revalidate: 60 },
+          },
         )
         if (quoteRes.ok) {
           const quoteData = await quoteRes.json()
@@ -134,8 +145,17 @@ async function searchStocks(q: string, supabase: SupabaseClient) {
     }),
   )
 
-  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
-  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
+  const idMap = await lookupAssetIds(
+    supabase,
+    rawResults.map((result) => ({
+      ticker: result.ticker,
+      price_source: result.price_source,
+    })),
+  )
+  const results = rawResults.map((result) => ({
+    ...result,
+    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? null,
+  }))
 
   return NextResponse.json(results)
 }
@@ -151,6 +171,10 @@ async function searchCrypto(q: string, supabase: SupabaseClient, platformType: s
   try {
     const searchRes = await fetch(
       `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}&x_cg_demo_api_key=${apiKey}`,
+      {
+        signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+        next: { revalidate: 60 },
+      },
     )
     if (!searchRes.ok) {
       return NextResponse.json(
@@ -177,6 +201,10 @@ async function searchCrypto(q: string, supabase: SupabaseClient, platformType: s
   try {
     const priceRes = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&x_cg_demo_api_key=${apiKey}`,
+      {
+        signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+        next: { revalidate: 60 },
+      },
     )
     if (priceRes.ok) {
       priceMap = await priceRes.json()
@@ -196,9 +224,17 @@ async function searchCrypto(q: string, supabase: SupabaseClient, platformType: s
       : '0.00000000',
   }))
 
-  const idMap = await lookupAssetIds(supabase, rawResults.map((r) => r.ticker))
-  const results = rawResults.map((r) => ({ ...r, id: idMap.get(r.ticker) ?? null }))
+  const idMap = await lookupAssetIds(
+    supabase,
+    rawResults.map((result) => ({
+      ticker: result.ticker,
+      price_source: result.price_source,
+    })),
+  )
+  const results = rawResults.map((result) => ({
+    ...result,
+    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? null,
+  }))
 
   return NextResponse.json(results)
 }
-
