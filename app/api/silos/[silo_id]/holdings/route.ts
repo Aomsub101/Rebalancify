@@ -7,6 +7,17 @@ import { cashCurrencyForPlatform, convertAmount } from '@/lib/currency'
 
 type Params = Promise<{ silo_id: string }>
 
+interface FxRateRow {
+  currency: string
+  rate_to_usd: string
+}
+
+function isFxRateQuery(
+  value: unknown,
+): value is { in: (column: string, values: string[]) => PromiseLike<{ data: FxRateRow[] | null }> } {
+  return typeof value === 'object' && value !== null && 'in' in value && typeof (value as { in?: unknown }).in === 'function'
+}
+
 function unauthorized() {
   return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 })
 }
@@ -102,12 +113,9 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
   }
 
   const rateToUsdMap: Record<string, string | number> = { USD: 1 }
-  const fxTable = supabase.from('fx_rates') as { select?: (columns: string) => { in: (column: string, values: string[]) => Promise<{ data: Array<{ currency: string; rate_to_usd: string }> | null }> } } | undefined
-  if (fxTable?.select) {
-    const { data: fxRows } = await fxTable
-      .select('currency, rate_to_usd')
-      .in('currency', Array.from(currencies))
-
+  const fxSelection = (supabase.from('fx_rates') as { select?: (columns: string) => unknown } | undefined)?.select?.('currency, rate_to_usd')
+  if (isFxRateQuery(fxSelection)) {
+    const { data: fxRows } = await fxSelection.in('currency', Array.from(currencies))
     for (const row of fxRows ?? []) {
       rateToUsdMap[row.currency] = row.rate_to_usd
     }
