@@ -268,3 +268,110 @@ class TestProjectionMath:
         assert abs(ret_val / 100 - expected_3m) < 0.01, (
             f"3m return {ret_val}% doesn't match expected {expected_3m*100:.2f}%"
         )
+
+
+class _FakeExecuteResult:
+    def __init__(self, data):
+        self.data = data
+
+    def execute(self):
+        return self
+
+
+class _FakeTable:
+    def __init__(self, name: str, db):
+        self.name = name
+        self.db = db
+        self.filters = []
+        self.selected_columns = None
+        self.upserts = []
+        self.updates = []
+
+    def select(self, columns):
+        self.selected_columns = columns
+        return self
+
+    def eq(self, field, value):
+        self.filters.append(("eq", field, value))
+        return self
+
+    def is_(self, field, value):
+        self.filters.append(("is", field, value))
+        return self
+
+    def maybe_single(self):
+        return _FakeExecuteResult(self.db["select_rows"].get(self.name))
+
+    def execute(self):
+        return _FakeExecuteResult(None)
+
+    def update(self, payload):
+        self.updates.append(payload)
+        self.db["updates"].append((self.name, payload, list(self.filters)))
+        return self
+
+    def upsert(self, payload, on_conflict=None):
+        self.upserts.append((payload, on_conflict))
+        self.db["upserts"].append((self.name, payload, on_conflict))
+        return self
+
+
+class _FakeSupabase:
+    def __init__(self, select_rows=None):
+        self.db = {
+            "select_rows": select_rows or {},
+            "updates": [],
+            "upserts": [],
+        }
+
+    def table(self, name):
+        return _FakeTable(name, self.db)
+
+
+class TestCacheAndAssetBackfill:
+    def test_fetch_prices_accepts_timestamp_last_updated(self, monkeypatch):
+        from api import optimize
+
+        supabase = _FakeSupabase(
+            select_rows={
+                "asset_historical_data": {
+                    "ticker": "AAPL",
+                    "historical_prices": [
+                        {"date": "2026-03-31", "close": 100.0},
+                        {"date": "2026-04-01", "close": 101.0},
+                    ],
+                    "last_updated": "2026-04-02T00:00:00+00:00",
+                }
+            }
+        )
+
+        # Avoid date-sensitive flakiness by making the cache permanently fresh.
+        monkeypatch.setattr(optimize, "CACHE_TTL_HOURS", 10_000)
+
+        prices = optimize.fetch_prices(["AAPL"], supabase)
+
+        assert "AAPL" in prices
+        assert prices["AAPL"][0]["close"] == 100.0
+        assert supabase.db["updates"] == []
+        assert supabase.db["upserts"] == []
+
+    def test_fetch_prices_updates_assets_without_upsert(self, monkeypatch):
+        from api import optimize
+
+        class FakeTicker:
+            def history(self, period):
+                import pandas as pd
+
+                return pd.DataFrame(
+                    {"Close": [100.0, 101.0]},
+                    index=pd.to_datetime(["2021-04-05", "2021-04-06"]),
+                )
+
+        supabase = _FakeSupabase(select_rows={"asset_historical_data": None})
+        monkeypatch.setattr(optimize.yf, "Ticker", lambda ticker: FakeTicker())
+
+        prices = optimize.fetch_prices(["AAPL"], supabase)
+
+        assert len(prices["AAPL"]) == 2
+        assert any(name == "assets" for name, _, _ in supabase.db["updates"])
+        assert not any(name == "assets" for name, _, _ in supabase.db["upserts"])
