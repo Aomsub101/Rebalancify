@@ -92,6 +92,25 @@ function updateChain() {
   return chain
 }
 
+function deleteEqChain() {
+  const chain: Record<string, unknown> = { data: null, error: null }
+  chain.eq = vi.fn().mockReturnValue(chain)
+  return chain
+}
+
+function selectEqChain(data: unknown) {
+  const chain: Record<string, unknown> = { data, error: null }
+  chain.eq = vi.fn().mockReturnValue(chain)
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data, error: null })
+  return chain
+}
+
+function plainUpdateChain() {
+  const chain: Record<string, unknown> = { error: null }
+  chain.eq = vi.fn().mockReturnValue(chain)
+  return chain
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('POST /api/silos/:silo_id/sync', () => {
@@ -255,6 +274,127 @@ describe('POST /api/silos/:silo_id/sync', () => {
     expect(body.cash_balance).toBe('500.00')
     expect(typeof body.synced_at).toBe('string')
   })
+
+  it('replaces stale Alpaca holdings when a sold position disappears from the latest sync', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+
+    const holdingsDeleteChain = deleteEqChain()
+    const holdingsDelete = vi.fn().mockReturnValue(holdingsDeleteChain)
+    const holdingsUpsert = vi.fn().mockResolvedValue({ error: null })
+
+    mockFromImpl = (table) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'alpaca' }, error: null })
+        const siloUpdate = plainUpdateChain()
+        return {
+          select: vi.fn().mockReturnValue(selectChain),
+          update: vi.fn().mockReturnValue(siloUpdate),
+        }
+      }
+      if (table === 'user_profiles') {
+        const chain = eqChain({
+          data: {
+            alpaca_key_enc: MOCK_ALPACA_KEY_ENC,
+            alpaca_secret_enc: MOCK_ALPACA_SECRET_ENC,
+            alpaca_mode: 'paper',
+          },
+          error: null,
+        })
+        return { select: vi.fn().mockReturnValue(chain) }
+      }
+      if (table === 'assets') {
+        const assetQuery = selectEqChain({ id: 'asset-aapl' })
+        return { select: vi.fn().mockReturnValue(assetQuery) }
+      }
+      if (table === 'asset_mappings') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'holdings') {
+        return {
+          delete: holdingsDelete,
+          upsert: holdingsUpsert,
+        }
+      }
+      return {}
+    }
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ symbol: 'AAPL', qty: '50', asset_class: 'us_equity', cost_basis: '7500.00' }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cash: '1250.00' }),
+      })
+
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.holdings_updated).toBe(1)
+    expect(holdingsDelete).toHaveBeenCalledTimes(1)
+    expect(holdingsDeleteChain.eq).toHaveBeenCalledWith('silo_id', 'silo-uuid-1')
+    expect(holdingsUpsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears Alpaca synced holdings when the broker returns no positions', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+
+    const holdingsDeleteChain = deleteEqChain()
+    const holdingsDelete = vi.fn().mockReturnValue(holdingsDeleteChain)
+    const holdingsUpsert = vi.fn().mockResolvedValue({ error: null })
+
+    mockFromImpl = (table) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'alpaca' }, error: null })
+        const siloUpdate = plainUpdateChain()
+        return {
+          select: vi.fn().mockReturnValue(selectChain),
+          update: vi.fn().mockReturnValue(siloUpdate),
+        }
+      }
+      if (table === 'user_profiles') {
+        const chain = eqChain({
+          data: {
+            alpaca_key_enc: MOCK_ALPACA_KEY_ENC,
+            alpaca_secret_enc: MOCK_ALPACA_SECRET_ENC,
+            alpaca_mode: 'paper',
+          },
+          error: null,
+        })
+        return { select: vi.fn().mockReturnValue(chain) }
+      }
+      if (table === 'holdings') {
+        return {
+          delete: holdingsDelete,
+          upsert: holdingsUpsert,
+        }
+      }
+      return {}
+    }
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ cash: '300.00' }),
+      })
+
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.holdings_updated).toBe(0)
+    expect(holdingsDelete).toHaveBeenCalledTimes(1)
+    expect(holdingsDeleteChain.eq).toHaveBeenCalledWith('silo_id', 'silo-uuid-1')
+    expect(holdingsUpsert).not.toHaveBeenCalled()
+  })
 })
 
 // ── InnovestX equity sync tests ───────────────────────────────────────────────
@@ -288,6 +428,7 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
         return { upsert: vi.fn().mockResolvedValue({ error: null }) }
       }
       if (table === 'holdings') {
+        const selectChain = selectEqChain([])
         const upd: Record<string, unknown> = {}
         upd.eq = vi.fn().mockReturnValue(upd)
         Object.assign(upd, Promise.resolve({ error: null }))
@@ -295,7 +436,12 @@ describe('POST /api/silos/:silo_id/sync — InnovestX equity branch', () => {
         delChain.eq = vi.fn().mockReturnValue(delChain)
         delChain.neq = vi.fn().mockReturnValue(delChain)
         Object.assign(delChain, Promise.resolve({ error: null }))
-        return { upsert: vi.fn().mockResolvedValue({ error: null }), delete: vi.fn().mockReturnValue(delChain), update: vi.fn().mockReturnValue(upd) }
+        return {
+          select: vi.fn().mockReturnValue(selectChain),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+          delete: vi.fn().mockReturnValue(delChain),
+          update: vi.fn().mockReturnValue(upd),
+        }
       }
       if (table === 'price_cache_fresh') {
         // Return stale so fetchPrice tries Finnhub
@@ -534,6 +680,68 @@ describe('POST /api/silos/:silo_id/sync — Schwab branch', () => {
     const body = await res.json()
     expect(body.platform).toBe('schwab')
     expect(body.holdings_updated).toBe(0)
+  })
+
+  it('replaces stale Schwab holdings when a sold position disappears from the latest sync', async () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const holdingsDeleteChain = deleteEqChain()
+    const holdingsDelete = vi.fn().mockReturnValue(holdingsDeleteChain)
+
+    mockFromImpl = (table) => {
+      if (table === 'silos') {
+        const selectChain = eqChain({ data: { id: 'silo-1', platform_type: 'schwab' }, error: null })
+        const upd = plainUpdateChain()
+        return { select: vi.fn().mockReturnValue(selectChain), update: vi.fn().mockReturnValue(upd) }
+      }
+      if (table === 'user_profiles') {
+        return {
+          select: vi.fn().mockReturnValue(eqChain({
+            data: {
+              schwab_access_enc: MOCK_SCHWAB_ACCESS_ENC,
+              schwab_refresh_enc: MOCK_SCHWAB_REFRESH_ENC,
+              schwab_token_expires: futureDate,
+            },
+            error: null,
+          })),
+        }
+      }
+      if (table === 'assets') {
+        return { select: vi.fn().mockReturnValue(selectEqChain({ id: 'asset-aapl' })) }
+      }
+      if (table === 'asset_mappings') {
+        return { upsert: vi.fn().mockResolvedValue({ error: null }) }
+      }
+      if (table === 'holdings') {
+        return {
+          delete: holdingsDelete,
+          upsert: vi.fn().mockResolvedValue({ error: null }),
+        }
+      }
+      return {}
+    }
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          securitiesAccount: {
+            positions: [
+              { instrument: { symbol: 'AAPL', assetType: 'EQUITY' }, longQuantity: 10, shortQuantity: 0, costBasis: 1500 },
+            ],
+          },
+        },
+      ],
+    })
+
+    const [req, ctx] = makeRequest()
+    const res = await POST(req, ctx)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.holdings_updated).toBe(1)
+    expect(holdingsDelete).toHaveBeenCalledTimes(1)
+    expect(holdingsDeleteChain.eq).toHaveBeenCalledWith('silo_id', 'silo-uuid-1')
   })
 })
 
