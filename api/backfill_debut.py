@@ -109,10 +109,9 @@ def fetch_and_upsert_debut(supabase: Client, ticker_upper: str) -> str:
     debut_date = prices[0][0]  # YYYY-MM-DD string, already sorted ascending
 
     # Upsert market_debut_date — older date wins since yfinance lookback is up to 5yr
-    supabase.table("assets").upsert(
-        {"ticker": ticker_upper, "market_debut_date": debut_date},
-        on_conflict="ticker",
-    ).execute()
+    supabase.table("assets").update(
+        {"market_debut_date": debut_date}
+    ).eq("ticker", ticker_upper).is_("market_debut_date", "null").execute()
 
     return debut_date
 

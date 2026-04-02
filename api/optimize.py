@@ -165,14 +165,15 @@ def fetch_prices(tickers: list[str], supabase: Client) -> dict[str, list[dict]]:
         # Sort ascending by date
         prices.sort(key=lambda p: p["date"])
 
-        # Derive market debut from the first date in the fetched price series
+        # Derive market debut from the first date in the fetched price series.
+        # The assets table is keyed by id and only has a composite unique index on
+        # (ticker, price_source), so upserting on ticker alone is invalid. We only
+        # need to backfill existing asset rows here.
         if prices:
             debut_date = prices[0]["date"]  # already sorted ascending
-            # Older date wins since yfinance lookback is always up to 5yr
-            supabase.table("assets").upsert(
-                {"ticker": ticker_upper, "market_debut_date": debut_date},
-                on_conflict="ticker",
-            ).execute()
+            supabase.table("assets").update(
+                {"market_debut_date": debut_date}
+            ).eq("ticker", ticker_upper).is_("market_debut_date", "null").execute()
 
         # Step 3: Upsert to Supabase
         supabase.table("asset_historical_data").upsert(
