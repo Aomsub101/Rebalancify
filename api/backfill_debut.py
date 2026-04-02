@@ -34,7 +34,7 @@ class BackfillRequest(BaseModel):
 router = APIRouter(prefix="/backfill_debut", tags=["backfill_debut"])
 
 
-@router.post("/")
+@router.post("")
 async def backfill_debut_endpoint(
     body: BackfillRequest,
     x_api_key: str = Header(..., alias="X-API-Key"),

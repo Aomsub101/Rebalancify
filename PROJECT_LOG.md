@@ -39,6 +39,25 @@ Copy this block to the top of the Completed Stories section when closing a story
 
 ## Completed Stories
 
+### HOTFIX — Trailing slash 307 redirect in optimize and backfill_debut routes
+**Completed:** 2026-04-02
+
+**Root cause:**
+`api/optimize.py` and `api/backfill_debut.py` used `@router.post("/")` with `prefix="/optimize"` and `prefix="/backfill_debut"`. FastAPI registers the route strictly as `/optimize/` (with trailing slash) due to the trailing slash in the decorator. Frontend calls to `/optimize` (no trailing slash) return HTTP 307 Temporary Redirect to `/optimize/`.
+
+**What was fixed:**
+- `api/optimize.py`: Changed `@router.post("/")` → `@router.post("")` (line 57)
+- `api/backfill_debut.py`: Changed `@router.post("/")` → `@router.post("")` (line 37)
+- Routes now register as `/optimize` and `/backfill_debut` without trailing slash
+
+**Files modified:**
+- `api/optimize.py`
+- `api/backfill_debut.py`
+
+**Quality gates passed:** syntax check ✅
+
+---
+
 ### HOTFIX — `market_debut_date` always NULL for newly added assets
 **Completed:** 2026-04-01
 

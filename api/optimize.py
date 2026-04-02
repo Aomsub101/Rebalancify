@@ -54,7 +54,7 @@ class OptimizeRequest(BaseModel):
 router = APIRouter(prefix="/optimize", tags=["optimize"])
 
 
-@router.post("/")
+@router.post("")
 async def optimize_endpoint(
     body: OptimizeRequest,
     x_api_key: str = Header(..., alias="X-API-Key"),
