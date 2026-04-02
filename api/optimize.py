@@ -51,7 +51,7 @@ class OptimizeRequest(BaseModel):
 # FastAPI router
 # ---------------------------------------------------------------------------
 
-router = APIRouter(prefix="/optimize/", tags=["optimize"])
+router = APIRouter(prefix="/optimize", tags=["optimize"])
 
 
 @router.post("/")
