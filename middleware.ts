@@ -7,6 +7,10 @@ function isAuthRoute(pathname: string): boolean {
   return AUTH_ROUTES.some((route) => pathname.startsWith(route))
 }
 
+function isApiRoute(pathname: string): boolean {
+  return pathname.startsWith('/api/')
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -43,6 +47,13 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Route handlers enforce their own auth/validation. Redirecting API requests
+  // to /login breaks POST/JSON clients and proxy endpoints such as the Railway
+  // FastAPI bridge.
+  if (isApiRoute(pathname)) {
+    return supabaseResponse
+  }
+
   // Unauthenticated user trying to access a protected route → redirect to /login
   if (!user && !isAuthRoute(pathname)) {
     const url = request.nextUrl.clone()
@@ -63,11 +74,12 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths EXCEPT static files and images:
+     * Match all request paths EXCEPT API routes, static files, and images:
+     * - api (route handlers)
      * - _next/static (static files)
      * - _next/image (image optimisation)
      * - favicon.ico, and common image extensions
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
