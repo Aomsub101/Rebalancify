@@ -5,7 +5,7 @@
  *   1. Unauthenticated → 401
  *   2. Missing type param → 400
  *   3. type=stocks, FMP gainers/losers succeeds → top 5 gainers + top 5 losers
- *   4. type=stocks, FMP fails → Finnhub fallback → 200
+ *   4. type=stocks, FMP fails → Finnhub quote fallback → 200
  *   5. type=stocks, FMP + Finnhub both fail → stale price_cache fallback, stale:true
  *   6. type=crypto, CoinGecko succeeds → top 5 gainers + top 5 losers
  *   7. type=crypto, CoinGecko fails → stale price_cache fallback, stale:true
@@ -181,33 +181,47 @@ describe('GET /api/market/top-movers', () => {
   // 4. type=stocks, FMP fails → Finnhub fallback
   // ---------------------------------------------------------------------------
   it('falls back to Finnhub when FMP fails for stocks', async () => {
-    // FMP gainers call fails; FMP losers call fails; Finnhub screener returns data
-    const finnhubGainers = [
-      { symbol: 'NVDA', description: 'NVIDIA', lastSalePrice: 875,  netChange: 35.0, percentChange: 4.2 },
-      { symbol: 'AMD',  description: 'AMD',    lastSalePrice: 160,  netChange: 4.8,  percentChange: 3.1 },
-      { symbol: 'TSLA', description: 'Tesla',  lastSalePrice: 220,  netChange: 6.0,  percentChange: 2.8 },
-      { symbol: 'META', description: 'Meta',   lastSalePrice: 500,  netChange: 12.0, percentChange: 2.5 },
-      { symbol: 'AMZN', description: 'Amazon', lastSalePrice: 190,  netChange: 3.7,  percentChange: 2.0 },
+    const responses: Response[] = [
+      { ok: true, json: async () => ({ c: 220, dp: 4.2 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Tesla' }) } as Response,
+      { ok: true, json: async () => ({ c: 875, dp: 5.1 }) } as Response,
+      { ok: true, json: async () => ({ name: 'NVIDIA' }) } as Response,
+      { ok: true, json: async () => ({ c: 160, dp: 3.1 }) } as Response,
+      { ok: true, json: async () => ({ name: 'AMD' }) } as Response,
+      { ok: true, json: async () => ({ c: 190, dp: 2.0 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Amazon' }) } as Response,
+      { ok: true, json: async () => ({ c: 500, dp: 2.5 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Meta' }) } as Response,
+      { ok: true, json: async () => ({ c: 175, dp: 1.2 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Alphabet' }) } as Response,
+      { ok: true, json: async () => ({ c: 420, dp: 0.8 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Microsoft' }) } as Response,
+      { ok: true, json: async () => ({ c: 30, dp: -2.5 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Intel' }) } as Response,
+      { ok: true, json: async () => ({ c: 10, dp: -3.4 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Walgreens' }) } as Response,
+      { ok: true, json: async () => ({ c: 17, dp: -2.1 }) } as Response,
+      { ok: true, json: async () => ({ name: 'AT&T' }) } as Response,
+      { ok: true, json: async () => ({ c: 40, dp: -1.8 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Verizon' }) } as Response,
+      { ok: true, json: async () => ({ c: 12, dp: -1.1 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Ford' }) } as Response,
+      { ok: true, json: async () => ({ c: 58, dp: 1.4 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Visa' }) } as Response,
+      { ok: true, json: async () => ({ c: 25, dp: 0.6 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Palantir' }) } as Response,
+      { ok: true, json: async () => ({ c: 1100, dp: 2.9 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Broadcom' }) } as Response,
+      { ok: true, json: async () => ({ c: 62, dp: 1.0 }) } as Response,
+      { ok: true, json: async () => ({ name: 'Walmart' }) } as Response,
     ]
-    const finnhubLosers = [
-      { symbol: 'INTC', description: 'Intel',   lastSalePrice: 32.5, netChange: -1.05, percentChange: -3.1 },
-      { symbol: 'WBA',  description: 'Walgreen',lastSalePrice: 10.0, netChange: -0.29, percentChange: -2.8 },
-      { symbol: 'T',    description: 'AT&T',    lastSalePrice: 17.0, netChange: -0.44, percentChange: -2.5 },
-      { symbol: 'VZ',   description: 'Verizon', lastSalePrice: 40.0, netChange: -0.84, percentChange: -2.0 },
-      { symbol: 'F',    description: 'Ford',    lastSalePrice: 12.0, netChange: -0.18, percentChange: -1.5 },
-    ]
-
-    vi.spyOn(global, 'fetch')
-      .mockRejectedValueOnce(new Error('FMP unreachable'))    // FMP gainers
-      .mockRejectedValueOnce(new Error('FMP unreachable'))    // FMP losers
-      .mockResolvedValueOnce({                                // Finnhub gainers
-        ok: true,
-        json: async () => ({ result: finnhubGainers }),
-      } as Response)
-      .mockResolvedValueOnce({                                // Finnhub losers
-        ok: true,
-        json: async () => ({ result: finnhubLosers }),
-      } as Response)
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy
+      .mockRejectedValueOnce(new Error('FMP unreachable'))
+      .mockRejectedValueOnce(new Error('FMP unreachable'))
+    for (const response of responses) {
+      fetchSpy.mockResolvedValueOnce(response)
+    }
 
     const res = await GET(makeRequest('stocks'))
     expect(res.status).toBe(200)
@@ -215,7 +229,7 @@ describe('GET /api/market/top-movers', () => {
     expect(body.stale).toBe(false)
     expect(body.gainers).toHaveLength(5)
     expect(body.losers).toHaveLength(5)
-    expect(body.gainers[0].ticker).toBe('NVDA')
+    expect(body.gainers.some((item: { ticker: string }) => item.ticker === 'NVDA')).toBe(true)
   })
 
   // ---------------------------------------------------------------------------

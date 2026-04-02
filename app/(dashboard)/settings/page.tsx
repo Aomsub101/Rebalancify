@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Eye, EyeOff, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LLM_PROVIDERS, getDefaultModel, getModelsForProvider } from '@/lib/llmProviders'
+import { createClient } from '@/lib/supabase/client'
 
 interface ProfileData {
   id: string
@@ -47,6 +49,7 @@ const NOTIF_OPTIONS: { value: NotifChannel; label: string; description: string }
 ]
 
 export default function SettingsPage() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['profile'],
@@ -147,6 +150,17 @@ export default function SettingsPage() {
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error?.message ?? 'Update failed')
     return data
+  }
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    if (error) {
+      setSaveError(error.message)
+      return
+    }
+    router.replace('/login')
+    router.refresh()
   }
 
   async function handleSaveDisplayName() {
@@ -1279,6 +1293,24 @@ export default function SettingsPage() {
               (profile?.active_silo_count ?? 0) === 0 && 'w-0',
             )}
           />
+        </div>
+      </section>
+
+      <section aria-labelledby="account-heading" className="rounded-lg border border-border bg-card p-6 mb-6">
+        <h2 id="account-heading" className="text-xl font-medium text-foreground mb-1">Account</h2>
+        <p className="text-sm text-muted-foreground mb-4">Use this to end the current session on this device.</p>
+        <div className="flex justify-end">
+          <button
+            onClick={handleSignOut}
+            className={cn(
+              'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
+              'bg-secondary text-foreground hover:bg-secondary/80 transition-colors',
+              'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            )}
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            Sign out
+          </button>
         </div>
       </section>
 

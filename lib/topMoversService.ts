@@ -30,6 +30,10 @@ const FMP_API_KEY = process.env.FMP_API_KEY ?? ''
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY ?? ''
 const FETCH_TIMEOUT_MS = 8_000
 const TOP_N = 5
+const FINNHUB_FALLBACK_UNIVERSE = [
+  'AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'GOOGL', 'TSLA', 'AMD',
+  'NFLX', 'AVGO', 'JPM', 'WMT', 'V', 'MA', 'COST', 'PLTR',
+]
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,54 +107,61 @@ async function fetchFmpMovers(): Promise<{ gainers: TopMoverItem[]; losers: TopM
 // intended revalidate: 60s
 // ---------------------------------------------------------------------------
 
-interface FinnhubMover {
-  symbol: string
-  description: string
-  lastSalePrice: number
-  netChange: number
-  percentChange: number
+interface FinnhubQuote {
+  c: number
+  dp: number
 }
 
-interface FinnhubScreenerResult {
-  result: FinnhubMover[]
+interface FinnhubProfile {
+  ticker?: string
+  name?: string
 }
 
 async function fetchFinnhubMovers(): Promise<{ gainers: TopMoverItem[]; losers: TopMoverItem[] } | null> {
   try {
-    const [gRes, lRes] = await Promise.all([
-      fetch(
-        `https://finnhub.io/api/v1/scan/technical-indicator?exchange=US&sort=percent_change_desc&token=${FINNHUB_API_KEY}`,
-        { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-      ),
-      fetch(
-        `https://finnhub.io/api/v1/scan/technical-indicator?exchange=US&sort=percent_change_asc&token=${FINNHUB_API_KEY}`,
-        { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-      ),
-    ])
+    const quoteResults = await Promise.all(
+      FINNHUB_FALLBACK_UNIVERSE.map(async (ticker) => {
+        const [quoteRes, profileRes] = await Promise.all([
+          fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`,
+            { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+          ),
+          fetch(
+            `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`,
+            { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+          ),
+        ])
 
-    if (!gRes.ok || !lRes.ok) return null
+        if (!quoteRes.ok || !profileRes.ok) return null
 
-    const [gScreener, lScreener]: [FinnhubScreenerResult, FinnhubScreenerResult] =
-      await Promise.all([gRes.json(), lRes.json()])
+        const [quote, profile] = await Promise.all([
+          quoteRes.json() as Promise<FinnhubQuote>,
+          profileRes.json() as Promise<FinnhubProfile>,
+        ])
 
-    if (!gScreener?.result || !lScreener?.result) return null
+        if (typeof quote?.c !== 'number' || quote.c <= 0 || typeof quote?.dp !== 'number') {
+          return null
+        }
 
-    const toItem = (m: FinnhubMover): TopMoverItem => ({
-      ticker: m.symbol,
-      name: m.description,
-      price: fmtPrice(m.lastSalePrice),
-      change_pct: fmtChangePct(m.percentChange),
-    })
+        return {
+          ticker,
+          name: profile?.name?.trim() || ticker,
+          price: fmtPrice(quote.c),
+          change_pct: fmtChangePct(quote.dp),
+        } satisfies TopMoverItem
+      }),
+    )
 
-    const gainers = gScreener.result
-      .filter((m) => typeof m.percentChange === 'number' && m.percentChange > 0)
-      .map(toItem)
+    const items = quoteResults.filter((item): item is TopMoverItem => item !== null)
+    if (items.length === 0) return null
+
+    const gainers = items
+      .filter((item) => item.change_pct > 0)
       .sort((a, b) => b.change_pct - a.change_pct)
       .slice(0, TOP_N)
 
-    const losers = lScreener.result
-      .filter((m) => typeof m.percentChange === 'number' && m.percentChange < 0)
-      .map(toItem)
+    const losers = items
+      .filter((item) => item.change_pct < 0)
       .sort((a, b) => a.change_pct - b.change_pct)
       .slice(0, TOP_N)
 

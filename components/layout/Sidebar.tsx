@@ -54,8 +54,9 @@ export function Sidebar() {
 
   async function handleSignOut() {
     const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = '/login'
+    await supabase.auth.signOut({ scope: 'local' })
+    router.replace('/login')
+    router.refresh()
   }
 
   function handleNavClick(href: string) {

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { AlpacaLiveBadge } from '@/components/shared/AlpacaLiveBadge'
 import { SyncButton } from '@/components/silo/SyncButton'
@@ -16,6 +16,8 @@ interface SiloData {
 interface Props {
   silo: SiloData
   onAddAsset: () => void
+  onDelete?: () => void
+  isDeleting?: boolean
 }
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -27,7 +29,7 @@ const PLATFORM_LABEL: Record<string, string> = {
   webull: 'Webull',
 }
 
-export function SiloHeader({ silo, onAddAsset }: Props) {
+export function SiloHeader({ silo, onAddAsset, onDelete, isDeleting = false }: Props) {
   const isAlpacaLive = silo.platform_type === 'alpaca' && silo.alpaca_mode === 'live'
   const isApiSilo = silo.platform_type !== 'manual'
 
@@ -67,6 +69,17 @@ export function SiloHeader({ silo, onAddAsset }: Props) {
             Run rebalance
           </Link>
         </Button>
+        {onDelete && (
+          <Button
+            variant="destructive"
+            onClick={onDelete}
+            disabled={isDeleting}
+            className="gap-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            {isDeleting ? 'Deleting…' : 'Delete silo'}
+          </Button>
+        )}
       </div>
     </div>
   )
