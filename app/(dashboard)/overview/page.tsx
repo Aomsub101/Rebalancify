@@ -53,7 +53,7 @@ async function fetchFxRates(): Promise<Record<string, FxRateEntry>> {
 
 export default function OverviewPage() {
   const router = useRouter()
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
   const { showUSD } = useUI()
 
   // AC-3: fetch all active silos
@@ -90,6 +90,24 @@ export default function OverviewPage() {
       fxRates[currency] = parseFloat(entry.rate_to_usd)
     }
   }
+
+  const profileCurrency =
+    ((profile as { global_currency?: string; base_currency?: string } | null)?.global_currency ??
+      profile?.base_currency ??
+      '')
+      .toUpperCase()
+
+  const fallbackSummaryCurrency =
+    silos?.find((silo) => fxRates[silo.base_currency] !== undefined)?.base_currency ??
+    silos?.[0]?.base_currency ??
+    'USD'
+
+  const summaryCurrency =
+    showUSD
+      ? 'USD'
+      : profileCurrency && (profileCurrency === 'USD' || fxRates[profileCurrency] !== undefined)
+        ? profileCurrency
+        : fallbackSummaryCurrency
 
   // Aggregate all drift assets from all completed drift queries
   const allDriftAssets: DriftAsset[] = driftQueries.flatMap((q) => q.data?.assets ?? [])
@@ -153,6 +171,7 @@ export default function OverviewPage() {
                   allDriftAssets={allDriftAssets}
                   showUSD={showUSD}
                   fxRates={fxRates}
+                  targetCurrency={summaryCurrency}
                 />
 
                 {/* AC-2: GlobalDriftBanner — only when at least one asset is breached */}
