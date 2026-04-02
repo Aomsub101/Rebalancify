@@ -7,5 +7,7 @@ export async function GET(request: Request) {
 
   const loginUrl = new URL('/login', request.url)
   loginUrl.searchParams.set('signed_out', '1')
-  return NextResponse.redirect(loginUrl)
+  const response = NextResponse.redirect(loginUrl)
+  response.headers.set('Cache-Control', 'no-store')
+  return response
 }

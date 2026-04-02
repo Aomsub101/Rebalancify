@@ -1,25 +1,17 @@
-/**
- * lib/fxRates.ts
- * ExchangeRate-API v6 integration helpers.
- * Used by GET /api/fx-rates to fetch and cache currency rates.
- *
- * All monetary computations use string representation to 8dp (CLAUDE.md Rule 3).
- */
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-/** Shape of a successful ExchangeRate-API v6 response. */
 interface ExchangeRateApiResponse {
   result: string
   'error-type'?: string
   conversion_rates?: Record<string, number>
 }
 
-/**
- * Parses an ExchangeRate-API v6 `latest/USD` JSON response.
- *
- * @param data - Raw JSON body (unknown — validated here)
- * @returns Record of currency code → rate relative to USD (e.g. THB: 35.5 means 1 USD = 35.5 THB)
- * @throws Error if the API returned a non-success result or malformed data
- */
+export interface FxRateRow {
+  currency: string
+  rate_to_usd: string
+  fetched_at: string
+}
+
 export function parseExchangeRates(data: unknown): Record<string, number> {
   if (typeof data !== 'object' || data === null) {
     throw new Error('ExchangeRate-API returned unexpected data type')
@@ -38,23 +30,106 @@ export function parseExchangeRates(data: unknown): Record<string, number> {
   return body.conversion_rates
 }
 
-/**
- * Computes the rate_to_usd for a given currency.
- * rate_to_usd = 1 / conversion_rate (since conversion_rates are expressed as "1 USD = X currency")
- * For USD itself, rate_to_usd = 1.
- *
- * @param currency - ISO 4217 currency code (e.g. "THB")
- * @param rates    - From parseExchangeRates (USD-based)
- * @returns NUMERIC(20,8) string (e.g. "0.02816901")
- * @throws Error when currency is not present in rates
- */
 export function rateToUsd(currency: string, rates: Record<string, number>): string {
   const rateFromUsd = rates[currency]
   if (rateFromUsd === undefined) {
     throw new Error(`Currency ${currency} not found in exchange rates`)
   }
 
-  const rateToUsdValue = 1 / rateFromUsd
-  // Truncate (not round) to 8dp to match NUMERIC(20,8) stored precision
-  return rateToUsdValue.toFixed(8)
+  return (1 / rateFromUsd).toFixed(8)
+}
+
+export function isFxRateStale(row: FxRateRow, ttlMinutes = 60): boolean {
+  const ageMs = Date.now() - new Date(row.fetched_at).getTime()
+  return ageMs > ttlMinutes * 60 * 1000
+}
+
+function toResultMap(rows: FxRateRow[]): Record<string, { rate_to_usd: string; fetched_at: string }> {
+  const result: Record<string, { rate_to_usd: string; fetched_at: string }> = {}
+  for (const row of rows) {
+    result[row.currency] = { rate_to_usd: row.rate_to_usd, fetched_at: row.fetched_at }
+  }
+  return result
+}
+
+export async function ensureFxRates(
+  supabase: { from: (table: string) => unknown },
+  requestedCurrencies: string[],
+  ttlMinutes = 60,
+): Promise<Record<string, { rate_to_usd: string; fetched_at: string }>> {
+  const normalizedRequested = requestedCurrencies.filter(
+    (currency): currency is string => typeof currency === 'string' && currency.trim().length > 0,
+  )
+  const currencies = Array.from(
+    new Set(['USD', ...normalizedRequested.map((currency) => currency.toUpperCase())]),
+  )
+
+  const fxTable = supabase.from('fx_rates') as {
+    select?: (columns: string) => { in: (column: string, values: string[]) => PromiseLike<{ data: FxRateRow[] | null; error?: unknown }> }
+    upsert?: (
+      rows: Array<{ currency: string; rate_to_usd: string; fetched_at: string }>,
+      options: { onConflict: string },
+    ) => PromiseLike<{ error?: unknown }>
+  } | undefined
+
+  if (!fxTable?.select) {
+    return {
+      USD: {
+        rate_to_usd: '1.00000000',
+        fetched_at: new Date(0).toISOString(),
+      },
+    }
+  }
+
+  const { data: cachedRows, error: readError } = await fxTable
+    .select('currency, rate_to_usd, fetched_at')
+    .in('currency', currencies)
+
+  const cached = readError ? [] : (cachedRows ?? [])
+  const cachedMap = new Map(cached.map((row) => [row.currency, row]))
+  const needsRefresh =
+    currencies.some((currency) => !cachedMap.has(currency)) ||
+    cached.some((row) => isFxRateStale(row, ttlMinutes))
+
+  if (!needsRefresh) {
+    return toResultMap(cached)
+  }
+
+  const apiKey = process.env.EXCHANGERATE_API_KEY
+  if (!apiKey) {
+    return toResultMap(cached)
+  }
+
+  try {
+    const response = await fetch(`https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`)
+    const json = await response.json()
+    const rates = parseExchangeRates(json)
+
+    const now = new Date().toISOString()
+    const rows = currencies.map((currency) => ({
+      currency,
+      rate_to_usd: rateToUsd(currency, rates),
+      fetched_at: now,
+    }))
+
+    let writeError: unknown = null
+    if (fxTable.upsert) {
+      const result = await fxTable.upsert(rows, { onConflict: 'currency' })
+      writeError = result?.error
+    }
+
+    if (writeError) {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (url && serviceRoleKey) {
+        const serviceClient = createSupabaseClient(url, serviceRoleKey)
+        await serviceClient.from('fx_rates').upsert(rows, { onConflict: 'currency' })
+      }
+    }
+
+    return toResultMap(rows)
+  } catch {
+    console.error('[fx-rates] ExchangeRate-API unavailable - using cached rates')
+    return toResultMap(cached)
+  }
 }
