@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface UIState {
   showUSD: boolean
@@ -35,30 +35,14 @@ export function UIContextProvider({ children }: { children: ReactNode }) {
   const [showUSD, setShowUSD] = useState(false)
   const [onboarded, setOnboarded] = useState(false)
   const [progressBannerDismissed, setProgressBannerDismissed] = useState(false)
+  const { profile } = useAuth()
 
-  // Sync with persisted profile values when session changes
+  // Keep UI flags aligned with the canonical profile state from AuthContext.
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('show_usd_toggle, onboarded, progress_banner_dismissed')
-          .eq('id', session.user.id)
-          .single()
-
-        if (profileData) {
-          setShowUSD(profileData.show_usd_toggle ?? false)
-          setOnboarded(profileData.onboarded ?? false)
-          setProgressBannerDismissed(profileData.progress_banner_dismissed ?? false)
-        }
-      } else {
-        setShowUSD(false)
-        setOnboarded(false)
-        setProgressBannerDismissed(false)
-      }
-    })
-  }, [])
+    setShowUSD(profile?.show_usd_toggle ?? false)
+    setOnboarded(profile?.onboarded ?? false)
+    setProgressBannerDismissed(profile?.progress_banner_dismissed ?? false)
+  }, [profile])
 
   return (
     <UIContext.Provider

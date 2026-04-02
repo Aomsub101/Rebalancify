@@ -50,6 +50,12 @@ export interface PaginatedResult<T> {
   hasMore: boolean
 }
 
+interface ArticleStateRow {
+  article_id: string
+  is_read: boolean
+  is_dismissed: boolean
+}
+
 // ---------------------------------------------------------------------------
 // splitIntoTiers
 // ---------------------------------------------------------------------------
@@ -163,6 +169,38 @@ export function paginateArticles<T>(
   const items = articles.slice(offset, offset + limit)
   const hasMore = offset + limit < total
   return { items, total, hasMore }
+}
+
+export async function attachArticleState<T extends { id: string }>(
+  supabase: { from: (table: string) => any },
+  articles: T[],
+): Promise<Array<T & { is_read: boolean; is_dismissed: boolean }>> {
+  if (articles.length === 0) {
+    return []
+  }
+
+  const articleIds = articles.map((article) => article.id)
+  const { data: stateRows } = await supabase
+    .from('user_article_state')
+    .select('article_id, is_read, is_dismissed')
+    .in('article_id', articleIds)
+
+  const stateMap = new Map<string, { is_read: boolean; is_dismissed: boolean }>()
+  for (const row of stateRows ?? []) {
+    stateMap.set(row.article_id, {
+      is_read: row.is_read,
+      is_dismissed: row.is_dismissed,
+    })
+  }
+
+  return articles.map((article) => {
+    const state = stateMap.get(article.id)
+    return {
+      ...article,
+      is_read: state?.is_read ?? false,
+      is_dismissed: state?.is_dismissed ?? false,
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------

@@ -155,13 +155,22 @@ export default function SettingsPage() {
     window.location.assign('/api/auth/signout')
   }
 
+  async function saveProfileSection(
+    fields: Record<string, unknown>,
+    successMessage: string,
+    onSuccess?: () => void,
+  ) {
+    await patchProfile(fields)
+    await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    onSuccess?.()
+    toast.success(successMessage)
+  }
+
   async function handleSaveDisplayName() {
     setSaveError(null)
     setIsSavingProfile(true)
     try {
-      await patchProfile({ display_name: displayName.trim() || null })
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
-      toast.success('Display name saved.')
+      await saveProfileSection({ display_name: displayName.trim() || null }, 'Display name saved.')
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save display name.')
     } finally {
@@ -173,9 +182,10 @@ export default function SettingsPage() {
     setSaveError(null)
     setIsSavingNotif(true)
     try {
-      await patchProfile({ drift_notif_channel: notifChannel })
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
-      toast.success('Notification preference saved.')
+      await saveProfileSection(
+        { drift_notif_channel: notifChannel },
+        'Notification preference saved.',
+      )
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save notification preference.')
     } finally {

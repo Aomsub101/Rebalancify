@@ -18,17 +18,13 @@
 
 import { NextResponse } from 'next/server'
 import { createNewsClient } from '@/lib/newsQueryService'
-import { splitIntoTiers, mergeAndRankArticles, paginateArticles, type CachedArticle } from '@/lib/newsQueryService'
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ArticleStateRow {
-  article_id: string
-  is_read: boolean
-  is_dismissed: boolean
-}
+import {
+  splitIntoTiers,
+  mergeAndRankArticles,
+  paginateArticles,
+  attachArticleState,
+  type CachedArticle,
+} from '@/lib/newsQueryService'
 
 // ---------------------------------------------------------------------------
 // Handler
@@ -120,33 +116,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ data: [], page, limit, total: 0, hasMore: false })
   }
 
-  // -------------------------------------------------------------------------
-  // Step 4: Fetch user_article_state for the matched articles
-  // RLS on user_article_state ensures user B cannot see user A's state (AC-5)
-  // -------------------------------------------------------------------------
-  const articleIds = ranked.map((a) => a.id)
-
-  const { data: stateRows } = await supabase
-    .from('user_article_state')
-    .select('article_id, is_read, is_dismissed')
-    .in('article_id', articleIds)
-
-  const stateMap = new Map<string, { is_read: boolean; is_dismissed: boolean }>()
-  for (const row of (stateRows ?? []) as ArticleStateRow[]) {
-    stateMap.set(row.article_id, { is_read: row.is_read, is_dismissed: row.is_dismissed })
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 5: Join state + paginate
-  // -------------------------------------------------------------------------
-  const withState = ranked.map((a) => {
-    const state = stateMap.get(a.id)
-    return {
-      ...a,
-      is_read: state?.is_read ?? false,
-      is_dismissed: state?.is_dismissed ?? false,
-    }
-  })
+  const withState = await attachArticleState(supabase, ranked)
 
   const { items, total, hasMore } = paginateArticles(withState, page, limit)
 

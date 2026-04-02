@@ -72,6 +72,7 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     currency: (p.currency as string | null) ?? 'USD',
   }]))
   const targetMap = new Map((weightData ?? []).map(tw => [tw.asset_id, Number(tw.weight_pct)]))
+  const rowByAssetId = new Map(rows.map((row) => [row.asset_id, row]))
   const currencies = new Set<string>([silo.base_currency, cashCurrencyForPlatform(silo.platform_type, silo.base_currency)])
   for (const row of priceData ?? []) {
     currencies.add((row.currency as string | null) ?? 'USD')
@@ -79,12 +80,12 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
 
   // On-demand price fetch for uncached assets — prevents $0.00 values when sync failed to cache
   // (non-fatal: missing prices default to 0, same as before, but now we attempt to fill the gap)
-  const uncachedIds = rows.map(h => h.asset_id).filter(id => {
-    const quote = priceMap.get(id)
+  const uncachedIds = rows.filter((row) => {
+    const quote = priceMap.get(row.asset_id)
     return !quote || quote.price === '0'
-  })
+  }).map((row) => row.asset_id)
   for (const assetId of uncachedIds) {
-    const h = rows.find(r => r.asset_id === assetId)
+    const h = rowByAssetId.get(assetId)
     if (!h) continue
     const asset = h.assets as unknown as { ticker: string; name: string; asset_type: string; price_source: string }
     try {

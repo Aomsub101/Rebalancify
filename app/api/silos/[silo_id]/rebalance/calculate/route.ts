@@ -133,6 +133,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
   // -------------------------------------------------------------------------
 
   const holdingIds = holdingsRows.map(h => h.asset_id)
+  const holdingIdSet = new Set(holdingIds)
   const weightIds = weightRows.map(w => w.asset_id)
   const allAssetIds = [...new Set([...holdingIds, ...weightIds])]
 
@@ -181,16 +182,6 @@ export async function POST(request: NextRequest, { params }: { params: Params })
         source as 'finnhub' | 'coingecko',
       )
       priceMap.set(assetId, result.price)
-      // Upsert into price_cache so subsequent calls are fast
-      await supabase
-        .from('price_cache')
-        .upsert({
-          asset_id: assetId,
-          price: result.price,
-          currency: 'USD',
-          source: result.source,
-          fetched_at: new Date().toISOString(),
-        }, { onConflict: 'asset_id' })
     } catch {
       // non-fatal: exclude this asset from the engine
     }
@@ -210,7 +201,7 @@ export async function POST(request: NextRequest, { params }: { params: Params })
 
   // Include weight-only assets (no current holding) so the engine can compute BUY orders
   for (const w of weightRows) {
-    if (!holdingIds.includes(w.asset_id)) {
+    if (!holdingIdSet.has(w.asset_id)) {
       engineHoldings.push({
         asset_id: w.asset_id,
         ticker: assetTickerMap.get(w.asset_id) ?? w.asset_id,
