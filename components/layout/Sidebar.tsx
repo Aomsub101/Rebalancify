@@ -52,7 +52,7 @@ export function Sidebar() {
   const displayName = profileData?.display_name ?? profile?.display_name ?? null
 
   async function handleSignOut() {
-    window.location.assign('/auth/signout')
+    window.location.assign('/api/auth/signout')
   }
 
   function handleNavClick(href: string) {

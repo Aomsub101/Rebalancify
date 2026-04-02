@@ -152,7 +152,7 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
-    window.location.assign('/auth/signout')
+    window.location.assign('/api/auth/signout')
   }
 
   async function handleSaveDisplayName() {

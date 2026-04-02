@@ -4,19 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { computeDriftState } from '@/lib/drift'
 import { fetchPrice } from '@/lib/priceService'
 import { cashCurrencyForPlatform, convertAmount } from '@/lib/currency'
+import { ensureFxRates } from '@/lib/fxRates'
 
 type Params = Promise<{ silo_id: string }>
-
-interface FxRateRow {
-  currency: string
-  rate_to_usd: string
-}
-
-function isFxRateQuery(
-  value: unknown,
-): value is { in: (column: string, values: string[]) => PromiseLike<{ data: FxRateRow[] | null }> } {
-  return typeof value === 'object' && value !== null && 'in' in value && typeof (value as { in?: unknown }).in === 'function'
-}
 
 function unauthorized() {
   return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, { status: 401 })
@@ -112,13 +102,10 @@ export async function GET(_request: NextRequest, { params }: { params: Params })
     }
   }
 
+  const fxRateData = await ensureFxRates(supabase, Array.from(currencies))
   const rateToUsdMap: Record<string, string | number> = { USD: 1 }
-  const fxSelection = (supabase.from('fx_rates') as { select?: (columns: string) => unknown } | undefined)?.select?.('currency, rate_to_usd')
-  if (isFxRateQuery(fxSelection)) {
-    const { data: fxRows } = await fxSelection.in('currency', Array.from(currencies))
-    for (const row of fxRows ?? []) {
-      rateToUsdMap[row.currency] = row.rate_to_usd
-    }
+  for (const [currency, row] of Object.entries(fxRateData)) {
+    rateToUsdMap[currency] = row.rate_to_usd
   }
 
   // Compute totals using Decimal to avoid float arithmetic (CLAUDE.md Rule 3)
