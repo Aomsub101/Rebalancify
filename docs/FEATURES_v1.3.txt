@@ -180,3 +180,32 @@ F5-R4: The Portfolio Drift Indicator displays, for each asset in each silo, the 
   The drift threshold is user-configurable per silo (default: 5%). Drift is a current-snapshot calculation only — no historical drift data is stored.
 
 F5-R5: When any asset's drift exceeds its configured threshold, a daily digest alert is generated. The user configures their preferred delivery channel in Settings: in-app notification on next login, email notification via Resend, or both.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE 6: PORTFOLIO PROJECTION & OPTIMIZATION — V2.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Purpose: A scenario-simulation engine that runs mean-variance portfolio optimization (Markowitz framework) on a silo of two or more assets. It returns three strategy allocations with 3-month forward projections to help users understand risk/return trade-offs. Strictly an educational decision-support tool — does not constitute financial advice.
+
+F6-R1: The optimization engine requires a minimum of two assets within the silo to calculate the covariance matrix. Additionally, all assets in the silo must have at least 3 months of public trading history. If these constraints are not met, the "Simulate Scenarios" trigger is disabled and a tooltip explaining the limitation is displayed.
+
+F6-R2: Price history data is fetched via yfinance through a serverless proxy; API keys are never exposed to the client. The system utilizes a stale-while-revalidate cache architecture stored globally. If cached data is older than 24 hours, the system fetches up to 5 years of daily closing prices and updates the cache.
+
+F6-R3: The engine performs dynamic truncation for portfolios with varying asset histories. It identifies the asset with the shortest time-series data and truncates all other asset series to match this timeframe. If the resulting lookback period is less than 36 months, the system must display a prominent warning banner stating that the projection is limited and results may be highly volatile.
+
+F6-R4: The optimization calculator computes three distinct strategies based on foundational annualized mean return and covariance calculations:
+
+    Not to Lose: Global minimum volatility. Minimizes portfolio variance to find the mathematically safest combination.
+
+    Expected: Maximum Sharpe Ratio. Maximizes the risk-adjusted return using a 4% (0.04) annual risk-free rate.
+
+    Optimistic: Target Risk. Maximizes expected return with a constraint that portfolio volatility must not exceed 1.5× the volatility of the Maximum Sharpe portfolio.
+
+F6-R5: For each strategy, the engine calculates a 3-Month Projection mathematically derived from the optimized weights. The output includes the Expected 3-Month Return and a 95% confidence interval range formatted as "[Return]% ± [2 × Volatility]%".
+
+F6-R6: Results are rendered in a tabular format detailing the Strategy Name, Suggested Weights (comma-separated), Expected 3-Month Return, and an "Apply Weights" action. Clicking "Apply Weights" pre-fills the respective silo's target weight input fields with the suggested allocation but strictly requires the user to manually save the changes. No automatic saving or order submission is permitted from this surface.
+
+F6-R7: All optimization and projection surfaces must prominently display an uncollapsible financial disclaimer: "Simulation results are based on historical data and do not guarantee future performance. This tool is for educational purposes and does not constitute financial advice."
+
+F6-R8: To prevent redundant API calls, the frontend must implement state deduplication. The system tracks the current asset composition (tickers) and blocks consecutive simulation requests if the asset composition has not changed since the last run, firing a toast notification instead.

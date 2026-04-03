@@ -1,103 +1,123 @@
 # Rebalancify
 
-> Portfolio clarity for every platform.
+Portfolio clarity for every platform.
 
-Rebalancify is a free, open-source web application that gives self-directed retail investors a single hub for tracking, analysing, and rebalancing portfolios spread across multiple investment platforms.
+Rebalancify is a Next.js + Supabase application for tracking silo-based portfolios, monitoring drift, calculating rebalance orders, reviewing execution history, reading portfolio-aware news, exploring related assets, and running research workflows backed by a user-supplied LLM key.
 
----
+## Current Product Surface
 
-## What It Does
+The current codebase includes these user-facing areas:
 
-- **Centralises holdings** across Alpaca, BITKUB, InnovestX, Charles Schwab, Webull, DIME, and any other platform via manual entry.
-- **Calculates rebalancing orders** — deterministic, auditable buy/sell orders based on your user-defined target weights. Two rounding modes: Partial (minimise transactions) and Full (achieve exact weights).
-- **Executes orders on Alpaca** with your explicit approval in a non-dismissible confirmation dialog. All other platforms receive a manual instruction list in v1.0.
-- **Monitors portfolio drift** — daily digest alerts when any asset exceeds your configured drift threshold.
-- **Surfaces market news** — portfolio-filtered and macro news from Finnhub and FMP, with rate-limit-safe caching.
-- **Discovers related assets** — peer companies, top gainers/losers across US stocks and crypto.
-
----
-
-## Key Principles
-
-- **You always decide.** Rebalancify calculates and presents — it never allocates or executes without your explicit approval.
-- **No financial advice.** All AI outputs (v2.0) carry persistent disclaimers. The system never recommends target weights.
-- **Transparent calculations.** Every rebalancing session stores a full snapshot of the input state. You can always audit what the calculator used.
-- **Free to use.** Hosted at `rebalancify.app`. All integrations use free-tier APIs. No ads. No subscription required.
-- **Self-hostable.** Clone this repository and deploy to your own Vercel + Supabase accounts with no code changes.
-
----
+- Authenticated dashboard shell with `Overview`, `Silos`, `News`, `Discover`, `Settings`, and ticker-specific `Research` pages
+- Silo CRUD with per-silo base currency, drift threshold, and holdings/target-weight management
+- Rebalance wizard with calculate, review, execute, and per-silo history flows
+- Portfolio overview with drift summaries and optional USD display conversion
+- Portfolio news and macro news feeds with refresh, caching, and article state tracking
+- Asset search, top movers, and peer discovery
+- AI Research Hub page for `/research/[ticker]`
+- Knowledge-base ingest/upload endpoints and research corpus size tracking
+- Portfolio optimization proxy route to a Railway-hosted Python service
+- PWA assets via `manifest.json` and generated service worker files
 
 ## Tech Stack
 
-Next.js 15 · TypeScript · Tailwind CSS · Supabase (PostgreSQL + Auth) · Vercel · React Query · Resend
+- Next.js 15 App Router
+- React 19
+- TypeScript
+- Tailwind CSS v3
+- TanStack Query
+- Supabase Auth + Postgres
+- Vercel deployment target for the web app
+- Railway-hosted Python service for optimization
+- Vitest and Playwright for testing
 
----
+## Main Directories
 
-## Getting Started
+- `app/`: App Router pages and API routes
+- `components/`: UI components and feature views
+- `contexts/`: auth and UI state providers
+- `hooks/`: client hooks
+- `lib/`: shared domain logic, API helpers, services, and types
+- `knowledge/`: default markdown corpus for the research feature
+- `api/`: Python optimization service code and config
+- `docs/`: architecture, plans, design, and development notes
+- `stories/`: product stories and implementation slices
 
-### Hosted version
+## Key Flows In Code
 
-Visit `https://rebalancify.app` — create a free account.
+- Auth flow with Supabase clients, middleware protection, and profile API
+- Silo creation and editing, holdings management, target weights, and drift checks
+- Rebalance calculation and execution routes with immutable session history
+- Alpaca credential storage and platform settings in the dashboard settings page
+- News refresh/query stack backed by `lib/newsService.ts` and `lib/newsQueryService.ts`
+- Research generation and caching through `/api/research/[ticker]`
+- Knowledge ingest and upload through `/api/knowledge/*`
+- Optimization proxy through `/api/optimize`
 
-### Self-hosting
+## Local Development
+
+Install dependencies with either `npm` or `pnpm`. The repo currently includes both `package-lock.json` and `pnpm-lock.yaml`.
 
 ```bash
-git clone https://github.com/[your-org]/rebalancify.git
-cd rebalancify
-pnpm install
+git clone https://github.com/Aomsub101/Rebalancify.git
+cd Rebalancify
+npm install
 cp .env.example .env.local
-# Fill in .env.local with your Supabase + Vercel credentials
-pnpm dev
+npm run dev
 ```
 
-See `docs/development/01-dev-environment.md` for a complete setup guide.
+If you prefer `pnpm`, use `pnpm install` and `pnpm dev` instead.
 
----
+Open `http://localhost:3000`. The root route redirects to `/overview`.
 
-## Platform Support (v1.0)
+## Environment Variables
 
-| Platform           | Holdings Fetch | Order Execution           |
-| ------------------ | -------------- | ------------------------- |
-| Alpaca             | Automated      | Automated (user-approved) |
-| BITKUB             | Automated      | Manual (v2.0)             |
-| InnovestX          | Automated      | Manual (v2.0)             |
-| Charles Schwab     | Automated      | Manual (v2.0)             |
-| Webull             | Automated      | Manual (v2.0)             |
-| DIME               | Manual entry   | — (no API)               |
-| Any other platform | Manual entry   | —                        |
+Use `.env.example` as the source of truth. The current app expects configuration for:
 
----
+- Supabase
+- Encryption key
+- Finnhub, FMP, Resend, and ExchangeRate APIs
+- Schwab OAuth
+- Embedding provider for knowledge ingestion
+- Railway optimization proxy
+- Cron authentication
 
-## Release Roadmap
+## Useful Scripts
 
-| Release              | Scope                                                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **v1.0 (MVP)** | Portfolio tracking, rebalancing engine, platform silos, Alpaca execution, drift monitoring, news feed, asset discovery |
-| **v2.0**       | AI Research Hub (RAG + LLM BYOK), automated execution for BITKUB / InnovestX / Schwab / Webull                         |
-| **v3.0+**      | Tax-lot tracking, additional exchanges, native mobile app, GraphRAG                                                    |
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run type-check
+npm run test
+npm run test:coverage
+npm run test:e2e
+```
 
----
+## Verification
 
-## For Developers
+Recent refactor verification was run with:
 
-See the `docs/` directory:
+```bash
+npx vitest run lib/__tests__/profileApi.test.ts lib/__tests__/overview.test.ts lib/__tests__/rebalanceUi.test.ts app/api/profile/__tests__/route.test.ts app/api/silos/__tests__/route.test.ts app/api/silos/[silo_id]/holdings/__tests__/route.test.ts app/api/silos/[silo_id]/rebalance/calculate/__tests__/route.test.ts app/api/silos/[silo_id]/rebalance/execute/__tests__/route.test.ts lib/rebalanceEngine.test.ts
+npx tsc --noEmit
+```
 
-- `docs/prd/` — Product requirements and feature specifications
-- `docs/architecture/` — Database schema, API contract, component tree, build order
-- `docs/design/` — Design system, component library, screen flows
-- `docs/development/` — Dev environment, coding standards, testing, deployment
-- `stories/` — Epics and user stories with acceptance criteria
+## Documentation
 
-All Claude Code agents and new contributors: read `KICKSTART.md` first — it is the mandatory entry point that defines reading order, rules, and resume protocol. CLAUDE.md is the second document to read, per KICKSTART.md's Section 2.
+- `docs/plans/`: implementation plans and progress tracking
+- `docs/architecture/`: schema, contracts, and component architecture
+- `docs/development/`: local setup and engineering workflow notes
+- `docs/design/`: UX and UI references
+- `PROGRESS.md`: running implementation log
 
----
+The latest refactor progress summary for plans `01`, `02`, and `03` is in `docs/plans/PLAN_PROGRESS.md`.
 
-## Licence
+## Licensing Status
 
-MIT. See `LICENSE`.
-
----
+`package.json` currently declares `ISC`, but there is no root `LICENSE` file checked into the repository at the moment. Treat the repository license state as needing confirmation before redistribution.
 
 ## Disclaimer
 
-This software is provided for informational and educational purposes only. Nothing in Rebalancify constitutes financial advice. Consult a licensed financial advisor before making investment decisions.
+This software is for informational and educational use. It is not financial advice, and all investment decisions remain the user's responsibility.
