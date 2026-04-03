@@ -187,4 +187,53 @@ describe('POST /api/silos/:silo_id/rebalance/calculate', () => {
     expect(Array.isArray(body.orders)).toBe(true)
     expect(body.orders[0].ticker).toBe('MSFT')
   })
+
+  it('adds injected cash to available capital when include_cash=true', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
+    mockFromImpl = (table) => {
+      if (table === 'silos') return singleChain({ id: 'silo-1', user_id: 'user-1', cash_balance: '0.00000000' })
+      if (table === 'holdings') {
+        return eqResultChain([{ asset_id: 'asset-aapl', quantity: '1.00000000', assets: { ticker: 'AAPL' } }])
+      }
+      if (table === 'target_weights') {
+        return eqResultChain([{ asset_id: 'asset-aapl', weight_pct: '50.000' }, { asset_id: 'asset-msft', weight_pct: '50.000' }])
+      }
+      if (table === 'price_cache') {
+        return inResultChain([{ asset_id: 'asset-aapl', price: '100.00000000' }, { asset_id: 'asset-msft', price: '100.00000000' }])
+      }
+      if (table === 'assets') {
+        return inResultChain([
+          { id: 'asset-aapl', ticker: 'AAPL', price_source: 'finnhub' },
+          { id: 'asset-msft', ticker: 'MSFT', price_source: 'finnhub' },
+        ])
+      }
+      if (table === 'rebalance_sessions') return insertSingleChain({ id: 'sess-2' })
+      if (table === 'rebalance_orders') {
+        return insertListChain([
+          {
+            id: 'order-1',
+            asset_id: 'asset-msft',
+            order_type: 'buy',
+            quantity: '1.00000000',
+            estimated_value: '100.00000000',
+            price_at_calc: '100.00000000',
+            weight_before_pct: '0.000',
+            weight_after_pct: '50.000',
+          },
+        ])
+      }
+      return {}
+    }
+
+    const [req, ctx] = makeRequest('silo-1', {
+      mode: 'partial',
+      include_cash: true,
+      cash_amount: '100.00000000',
+    })
+    const res = await POST(req, ctx)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.session_id).toBe('sess-2')
+    expect(body.orders[0].estimated_value).toBe('100.00000000')
+  })
 })

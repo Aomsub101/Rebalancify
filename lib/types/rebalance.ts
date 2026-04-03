@@ -26,6 +26,12 @@ export interface CalculateResponse {
   orders: RebalanceOrder[]
 }
 
+export interface CalculateRequest {
+  mode: 'partial' | 'full'
+  include_cash?: boolean
+  cash_amount?: string
+}
+
 export interface ExecuteOrderResult {
   id: string
   execution_status: 'executed' | 'skipped' | 'failed' | 'manual'

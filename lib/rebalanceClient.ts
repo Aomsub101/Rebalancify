@@ -1,15 +1,20 @@
 'use client'
 
-import type { CalculateResponse, ExecuteResponse } from '@/lib/types/rebalance'
+import type { CalculateRequest, CalculateResponse, ExecuteResponse } from '@/lib/types/rebalance'
 
 export async function calculateRebalanceOrders(params: {
   siloId: string
-  mode: 'partial' | 'full'
-}): Promise<CalculateResponse> {
+} & CalculateRequest): Promise<CalculateResponse> {
+  const body: CalculateRequest = { mode: params.mode }
+  if (params.include_cash) {
+    body.include_cash = true
+    body.cash_amount = params.cash_amount ?? '0.00000000'
+  }
+
   const response = await fetch(`/api/silos/${params.siloId}/rebalance/calculate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode: params.mode }),
+    body: JSON.stringify(body),
   })
   const data = await response.json()
 

@@ -8,6 +8,8 @@ type RouteResult<T> = { ok: true; data: T; status?: number } | { ok: false; resp
 
 interface CalcRequest {
   mode?: 'partial' | 'full'
+  include_cash?: boolean
+  cash_amount?: string
 }
 
 export async function calculateRebalanceResponse(
@@ -29,6 +31,28 @@ export async function calculateRebalanceResponse(
       ok: false,
       response: NextResponse.json(
         { error: { code: 'INVALID_MODE', message: "mode must be 'partial' or 'full'" } },
+        { status: 400 },
+      ),
+    }
+  }
+
+  const includeCash = body.include_cash === true
+  const extraCashAmount = body.cash_amount?.trim() || '0'
+  if (includeCash && Number.isNaN(Number(extraCashAmount))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: { code: 'INVALID_VALUE', message: 'cash_amount must be a valid number' } },
+        { status: 400 },
+      ),
+    }
+  }
+
+  if (includeCash && Number(extraCashAmount) < 0) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: { code: 'INVALID_VALUE', message: 'cash_amount must be non-negative' } },
         { status: 400 },
       ),
     }
@@ -156,7 +180,7 @@ export async function calculateRebalanceResponse(
     holdings: engineHoldings,
     weights: engineWeights,
     mode,
-    cashBalance: String(silo.cash_balance ?? '0'),
+    cashBalance: String((Number(silo.cash_balance ?? '0') + (includeCash ? Number(extraCashAmount) : 0)).toFixed(8)),
   })
 
   if (!result.balance_valid) {

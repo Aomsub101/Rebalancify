@@ -17,9 +17,15 @@ export function OnboardingGate() {
   const { isLoading } = useAuth()
   const { onboarded, progressBannerDismissed } = useUI()
   const siloCount = useSiloCount()
+  const isE2EBypass = typeof document !== 'undefined' && document.cookie.includes('E2E_BYPASS=1')
 
   // Don't render anything while auth is still resolving
   if (isLoading) return null
+
+  // Playwright uses the E2E bypass cookie to access protected routes without a
+  // real authenticated browser session. Suppress onboarding overlays there so
+  // page-level E2E tests can interact with the target UI.
+  if (isE2EBypass) return null
 
   // AC-1: modal appears when not onboarded AND no silos yet
   const showModal = !onboarded && siloCount === 0

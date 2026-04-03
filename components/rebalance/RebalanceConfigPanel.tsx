@@ -26,6 +26,8 @@ interface Props {
 
 export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }: Props) {
   const [mode, setMode] = useState<'partial' | 'full'>('partial')
+  const [includeCash, setIncludeCash] = useState(false)
+  const [cashAmount, setCashAmount] = useState('')
   const [isCalculating, setIsCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { isOnline } = useOnlineStatus()
@@ -38,7 +40,12 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
     setError(null)
     setIsCalculating(true)
     try {
-      onCalculated(await calculateRebalanceOrders({ siloId, mode }))
+      onCalculated(await calculateRebalanceOrders({
+        siloId,
+        mode,
+        include_cash: includeCash,
+        cash_amount: includeCash ? (cashAmount.trim() || '0') : undefined,
+      }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Calculation failed')
     } finally {
@@ -54,8 +61,10 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Partial mode card */}
           <button
+            type="button"
             role="radio"
             aria-checked={mode === 'partial'}
+            aria-label="Partial"
             onClick={() => setMode('partial')}
             className={`text-left p-4 rounded-lg border-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               mode === 'partial'
@@ -81,8 +90,10 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
 
           {/* Full mode card */}
           <button
+            type="button"
             role="radio"
             aria-checked={mode === 'full'}
+            aria-label="Full"
             onClick={() => setMode('full')}
             className={`text-left p-4 rounded-lg border-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               mode === 'full'
@@ -106,6 +117,38 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
             <p className="text-xs text-muted-foreground pl-6 mt-0.5">±0.01% accuracy</p>
           </button>
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <label className="inline-flex items-center gap-3 text-sm text-foreground" htmlFor="include-additional-cash">
+          <input
+            id="include-additional-cash"
+            type="checkbox"
+            checked={includeCash}
+            onChange={(e) => setIncludeCash(e.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          />
+          Include additional cash
+        </label>
+
+        {includeCash && (
+          <div className="max-w-xs space-y-1">
+            <label htmlFor="cash-amount" className="block text-sm font-medium text-foreground">
+              Cash amount
+            </label>
+            <input
+              id="cash-amount"
+              inputMode="decimal"
+              type="number"
+              min="0"
+              step="0.01"
+              value={cashAmount}
+              onChange={(e) => setCashAmount(e.target.value)}
+              placeholder="0.00"
+              className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+        )}
       </div>
 
       {/* Full rebalance warning (AC2) */}
@@ -156,6 +199,7 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
         <div className="relative group">
           <span className={cn(!isOnline && 'cursor-not-allowed')}>
             <button
+              type="button"
               onClick={handleCalculate}
               disabled={isCalculating || !isOnline}
               aria-label={isOnline ? undefined : 'Unavailable offline'}

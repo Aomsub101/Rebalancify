@@ -37,8 +37,20 @@ async function lookupAssetIds(
     .select('id, ticker, price_source')
     .in('ticker', tickers)
   const map = new Map<string, string>()
-  for (const row of (data ?? []) as { id: string; ticker: string; price_source: string }[]) {
-    map.set(`${row.ticker}:${row.price_source}`, row.id)
+  const rows = (data ?? []) as Array<{ id: string; ticker: string; price_source?: string | null }>
+  const tickerCounts = new Map<string, number>()
+
+  for (const row of rows) {
+    tickerCounts.set(row.ticker, (tickerCounts.get(row.ticker) ?? 0) + 1)
+    if (row.price_source) {
+      map.set(`${row.ticker}:${row.price_source}`, row.id)
+    }
+  }
+
+  for (const row of rows) {
+    if ((tickerCounts.get(row.ticker) ?? 0) === 1) {
+      map.set(row.ticker, row.id)
+    }
   }
   return map
 }
@@ -154,7 +166,7 @@ async function searchStocks(q: string, supabase: SupabaseClient) {
   )
   const results = rawResults.map((result) => ({
     ...result,
-    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? null,
+    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? idMap.get(result.ticker) ?? null,
   }))
 
   return NextResponse.json(results)
@@ -233,7 +245,7 @@ async function searchCrypto(q: string, supabase: SupabaseClient, platformType: s
   )
   const results = rawResults.map((result) => ({
     ...result,
-    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? null,
+    id: idMap.get(`${result.ticker}:${result.price_source}`) ?? idMap.get(result.ticker) ?? null,
   }))
 
   return NextResponse.json(results)

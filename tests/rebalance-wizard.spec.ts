@@ -180,9 +180,9 @@ test.describe('Rebalancing Wizard — Step 2 (Review)', () => {
     await navigateToStep2(page)
 
     // AC3: BUY green badge
-    await expect(page.getByText('BUY')).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'BUY', exact: true })).toBeVisible()
     // AC3: SELL red badge
-    await expect(page.getByText('SELL')).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'SELL', exact: true })).toBeVisible()
     // Tickers visible
     await expect(page.getByText('AAPL')).toBeVisible()
     await expect(page.getByText('MSFT')).toBeVisible()
@@ -226,9 +226,11 @@ test.describe('Rebalancing Wizard — Step 2 (Review)', () => {
     const dialog = page.getByRole('dialog')
 
     // AC6: order count
-    await expect(dialog.getByText('2')).toBeVisible()
+    await expect(dialog).toContainText('Orders to execute')
+    await expect(dialog).toContainText('2')
     // AC6: platform name (Alpaca for this test)
-    await expect(dialog.getByText(/alpaca/i)).toBeVisible()
+    await expect(dialog).toContainText('Platform')
+    await expect(dialog).toContainText('Alpaca')
     // AC6: total estimated value (AAPL $370 + MSFT $420 = $790)
     await expect(dialog.getByText(/790/)).toBeVisible()
   })
@@ -287,7 +289,7 @@ test.describe('Rebalancing Wizard — Step 3 (Result)', () => {
     await dialog.getByRole('button', { name: /confirm/i }).click()
 
     // AC7: per-order executed status
-    const executedStatuses = page.getByText('Executed')
+    const executedStatuses = page.getByRole('cell', { name: 'Executed', exact: true })
     await expect(executedStatuses).toHaveCount(2)
 
     // AC7: total counts visible
