@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { Search, Compass, BarChart2 } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { TopMoversTable, type TopMoverItem } from '@/components/discover/TopMoversTable'
 import { PeerCard, type PeerAsset } from '@/components/discover/PeerCard'
 import { DriftBadge } from '@/components/shared/DriftBadge'
@@ -91,7 +91,7 @@ function useDebounce<T>(value: T, delayMs: number): T {
 // ---------------------------------------------------------------------------
 
 export default function DiscoverPage() {
-  const { session } = useSession()
+  const { session } = useAuth()
 
   const authHeaders: Record<string, string> = session
     ? { Authorization: `Bearer ${session.access_token}` }

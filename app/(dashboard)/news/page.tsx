@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw, Newspaper, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { ArticleCard, type Article } from '@/components/news/ArticleCard'
 import { RateLimitBanner } from '@/components/news/RateLimitBanner'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -59,7 +59,7 @@ function formatRelativeTime(dateStr: string | null | undefined): string {
 // ---------------------------------------------------------------------------
 
 export default function NewsPage() {
-  const { session } = useSession()
+  const { session } = useAuth()
   const queryClient = useQueryClient()
 
   const [activeTab, setActiveTab] = useState<Tab>('portfolio')

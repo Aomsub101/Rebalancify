@@ -26,7 +26,8 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useSiloCount } from '@/contexts/UIContext'
 
 interface UserProfile {
   id: string
@@ -70,89 +71,29 @@ const SessionContext = createContext<SessionContextValue>({
 })
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [siloCount, setSiloCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
   const [showUSD, setShowUSD] = useState(false)
+  const auth = useAuth()
+  const siloCount = useSiloCount()
 
-  // Refreshes profile + silo count from Supabase — called after onboarding mutations
-  const refreshProfile = async () => {
-    const supabase = createClient()
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser) return
-
-    const { data: profileData } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single()
-
-    setProfile(profileData ?? null)
-    setShowUSD(profileData?.show_usd_toggle ?? false)
-
-    const { count } = await supabase
-      .from('silos')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUser.id)
-      .eq('is_active', true)
-
-    setSiloCount(count ?? 0)
-  }
-
+  // Keep backward-compatible UI flags aligned with the canonical auth profile.
   useEffect(() => {
-    const supabase = createClient()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        setSession(newSession)
-
-        if (newSession?.user) {
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', newSession.user.id)
-            .single()
-
-          setProfile(profileData ?? null)
-          setShowUSD(profileData?.show_usd_toggle ?? false)
-
-          const { count } = await supabase
-            .from('silos')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', newSession.user.id)
-            .eq('is_active', true)
-
-          setSiloCount(count ?? 0)
-        } else {
-          setProfile(null)
-          setSiloCount(0)
-          setShowUSD(false)
-        }
-
-        setIsLoading(false)
-      }
-    )
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
+    setShowUSD(auth.profile?.show_usd_toggle ?? false)
+  }, [auth.profile])
 
   return (
     <SessionContext.Provider
       value={{
-        session,
-        user: session?.user ?? null,
-        profile,
+        session: auth.session,
+        user: auth.user,
+        profile: auth.profile,
         showUSD,
         setShowUSD,
         siloCount,
-        setSiloCount,
-        onboarded: profile?.onboarded ?? false,
-        progressBannerDismissed: profile?.progress_banner_dismissed ?? false,
-        refreshProfile,
-        isLoading,
+        setSiloCount: () => undefined,
+        onboarded: auth.profile?.onboarded ?? false,
+        progressBannerDismissed: auth.profile?.progress_banner_dismissed ?? false,
+        refreshProfile: auth.refreshProfile,
+        isLoading: auth.isLoading,
       }}
     >
       {children}
