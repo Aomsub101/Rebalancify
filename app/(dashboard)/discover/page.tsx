@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import type { DriftState } from '@/lib/drift'
+import { PROFILE_QUERY_KEY, fetchProfile } from '@/lib/profileClient'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,12 +99,8 @@ export default function DiscoverPage() {
     : {}
 
   const { data: profile } = useQuery<ProfileResponse>({
-    queryKey: ['profile'],
-    queryFn: async () => {
-      const res = await fetch('/api/profile', { headers: authHeaders })
-      if (!res.ok) throw new Error('Failed to fetch profile')
-      return res.json()
-    },
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: () => fetchProfile<ProfileResponse>({ headers: authHeaders }),
     enabled: !!session,
     staleTime: 60 * 1000,
   })

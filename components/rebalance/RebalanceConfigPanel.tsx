@@ -16,6 +16,7 @@ import type { CalculateResponse } from '@/lib/types/rebalance'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { calculateRebalanceOrders } from '@/lib/rebalanceClient'
 
 interface Props {
   siloId: string
@@ -37,20 +38,7 @@ export function RebalanceConfigPanel({ siloId, initialWeightsSum, onCalculated }
     setError(null)
     setIsCalculating(true)
     try {
-      const res = await fetch(`/api/silos/${siloId}/rebalance/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode,
-        }),
-      })
-      const data = await res.json()
-
-      if (!res.ok && res.status !== 422) {
-        throw new Error(data?.error?.message ?? 'Calculation failed')
-      }
-
-      onCalculated(data as CalculateResponse)
+      onCalculated(await calculateRebalanceOrders({ siloId, mode }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Calculation failed')
     } finally {
