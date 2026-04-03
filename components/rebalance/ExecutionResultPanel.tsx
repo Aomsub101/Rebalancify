@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { CheckCircle, XCircle, MinusCircle, Copy, ArrowLeft } from 'lucide-react'
 import { formatNumber } from '@/lib/formatNumber'
 import type { CalculateResponse, ExecuteResponse } from '@/lib/types/rebalance'
+import { buildManualInstruction, getPlatformLabel } from '@/lib/rebalanceUi'
 
 interface Props {
   siloId: string
@@ -21,25 +22,6 @@ interface Props {
   baseCurrency: 'USD' | 'THB'
   calculateResult: CalculateResponse
   executeResult: ExecuteResponse
-}
-
-const PLATFORM_LABEL: Record<string, string> = {
-  alpaca: 'Alpaca',
-  bitkub: 'BITKUB',
-  investx: 'InnovestX',
-  schwab: 'Charles Schwab',
-  webull: 'Webull',
-  dime: 'DIME',
-  manual: 'Manual',
-}
-
-function buildManualInstruction(
-  order: CalculateResponse['orders'][number],
-  platformLabel: string,
-): string {
-  const action = order.order_type === 'buy' ? 'Buy' : 'Sell'
-  const qty = formatNumber(order.quantity, 'quantity', 'stock')
-  return `${action} ${qty} share${parseFloat(order.quantity) !== 1 ? 's' : ''} of ${order.ticker} at market on ${platformLabel}.`
 }
 
 export function ExecutionResultPanel({
@@ -51,7 +33,7 @@ export function ExecutionResultPanel({
 }: Props) {
   const router = useRouter()
   const isAlpaca = platformType === 'alpaca'
-  const platformLabel = PLATFORM_LABEL[platformType] ?? platformType
+  const platformLabel = getPlatformLabel(platformType)
 
   // Build a map of order results for quick lookup
   const statusMap = new Map(

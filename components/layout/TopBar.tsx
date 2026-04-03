@@ -6,28 +6,18 @@ import { Bell, DollarSign } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+import {
+  PROFILE_QUERY_KEY,
+  patchProfile,
+  tryFetchProfile,
+  invalidateProfileQuery,
+} from '@/lib/profileClient'
 import { cn } from '@/lib/utils'
-
-async function fetchProfile() {
-  const res = await fetch('/api/profile')
-  if (!res.ok) return null
-  return res.json() as Promise<{ notification_count: number } | null>
-}
 
 async function fetchFxRates() {
   const res = await fetch('/api/fx-rates')
   if (!res.ok) return null
   return res.json() as Promise<Record<string, unknown> | null>
-}
-
-async function patchShowUsd(value: boolean) {
-  const res = await fetch('/api/profile', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ show_usd_toggle: value }),
-  })
-  if (!res.ok) throw new Error('Failed to persist USD toggle')
-  return res.json()
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -54,8 +44,8 @@ export function TopBar() {
   const isOverview = pathname.startsWith('/overview')
 
   const { data: profileData, isLoading: profileLoading } = useQuery({
-    queryKey: ['profile'],
-    queryFn: fetchProfile,
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: () => tryFetchProfile<{ notification_count: number }>(),
     enabled: !!session,
   })
 
@@ -69,10 +59,10 @@ export function TopBar() {
   const fxAvailable = isOverview && !fxRatesError && fxRates !== null
 
   const toggleMutation = useMutation({
-    mutationFn: patchShowUsd,
+    mutationFn: (value: boolean) => patchProfile({ show_usd_toggle: value }),
     onSuccess: () => {
       // Invalidate profile cache so any consumers get the fresh value
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      invalidateProfileQuery(queryClient)
     },
   })
 

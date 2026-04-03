@@ -19,6 +19,13 @@ import { AlertCircle, Info } from 'lucide-react'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { formatNumber } from '@/lib/formatNumber'
 import type { CalculateResponse, ExecuteResponse } from '@/lib/types/rebalance'
+import { executeRebalanceOrders } from '@/lib/rebalanceClient'
+import {
+  getApprovedOrderIds,
+  getPlatformLabel,
+  getTotalEstimatedValue,
+  splitOrdersByType,
+} from '@/lib/rebalanceUi'
 
 interface Props {
   siloId: string
@@ -28,16 +35,6 @@ interface Props {
   calculateResult: CalculateResponse
   onExecuted: (result: ExecuteResponse) => void
   onBack: () => void
-}
-
-const PLATFORM_LABEL: Record<string, string> = {
-  alpaca: 'Alpaca',
-  bitkub: 'BITKUB',
-  innovestx: 'InnovestX',
-  schwab: 'Charles Schwab',
-  webull: 'Webull',
-  dime: 'DIME',
-  manual: 'Manual',
 }
 
 export function OrderReviewPanel({
@@ -55,11 +52,10 @@ export function OrderReviewPanel({
 
   const { orders, balance_valid, balance_errors } = calculateResult
   const isAlpaca = platformType === 'alpaca'
-  const platformLabel = PLATFORM_LABEL[platformType] ?? platformType
+  const platformLabel = getPlatformLabel(platformType)
 
   // Derive summary counts
-  const buyOrders = orders.filter(o => o.order_type === 'buy')
-  const sellOrders = orders.filter(o => o.order_type === 'sell')
+  const { buyOrders, sellOrders } = splitOrdersByType(orders)
 
   const totalBuyValue = buyOrders.reduce(
     (sum, o) => sum + parseFloat(o.estimated_value),
@@ -72,13 +68,8 @@ export function OrderReviewPanel({
   const netValue = totalSellValue - totalBuyValue
 
   // Orders not skipped → approved
-  const approvedOrderIds = orders
-    .filter(o => !skippedIds.has(o.id))
-    .map(o => o.id)
-
-  const totalApprovedValue = orders
-    .filter(o => !skippedIds.has(o.id))
-    .reduce((sum, o) => sum + parseFloat(o.estimated_value), 0)
+  const approvedOrderIds = getApprovedOrderIds(orders, skippedIds)
+  const totalApprovedValue = getTotalEstimatedValue(orders, skippedIds)
 
   function toggleSkip(id: string) {
     setSkippedIds(prev => {
@@ -94,20 +85,13 @@ export function OrderReviewPanel({
 
   // Execute mutation (AC8: invalidates holdings + sessions + silos)
   const { mutate: executeOrders, isPending: isExecuting } = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/silos/${siloId}/rebalance/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: calculateResult.session_id,
-          approved_order_ids: approvedOrderIds,
-          skipped_order_ids: [...skippedIds],
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error?.message ?? 'Execution failed')
-      return data as ExecuteResponse
-    },
+    mutationFn: () =>
+      executeRebalanceOrders({
+        siloId,
+        sessionId: calculateResult.session_id!,
+        approvedOrderIds,
+        skippedOrderIds: [...skippedIds],
+      }),
     onSuccess: (result) => {
       // AC8 — invalidate holdings, sessions, and silo state
       queryClient.invalidateQueries({ queryKey: ['holdings', siloId] })

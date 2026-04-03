@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { Search, Compass, BarChart2 } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { TopMoversTable, type TopMoverItem } from '@/components/discover/TopMoversTable'
 import { PeerCard, type PeerAsset } from '@/components/discover/PeerCard'
 import { DriftBadge } from '@/components/shared/DriftBadge'
@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
 import type { DriftState } from '@/lib/drift'
+import { PROFILE_QUERY_KEY, fetchProfile } from '@/lib/profileClient'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,19 +92,15 @@ function useDebounce<T>(value: T, delayMs: number): T {
 // ---------------------------------------------------------------------------
 
 export default function DiscoverPage() {
-  const { session } = useSession()
+  const { session } = useAuth()
 
   const authHeaders: Record<string, string> = session
     ? { Authorization: `Bearer ${session.access_token}` }
     : {}
 
   const { data: profile } = useQuery<ProfileResponse>({
-    queryKey: ['profile'],
-    queryFn: async () => {
-      const res = await fetch('/api/profile', { headers: authHeaders })
-      if (!res.ok) throw new Error('Failed to fetch profile')
-      return res.json()
-    },
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: () => fetchProfile<ProfileResponse>({ headers: authHeaders }),
     enabled: !!session,
     staleTime: 60 * 1000,
   })

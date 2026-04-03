@@ -12,13 +12,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
+import { PROFILE_QUERY_KEY, tryFetchProfile } from '@/lib/profileClient'
 import { cn } from '@/lib/utils'
-
-async function fetchProfile() {
-  const res = await fetch('/api/profile')
-  if (!res.ok) return null
-  return res.json() as Promise<{ active_silo_count: number; display_name: string | null; notification_count: number } | null>
-}
 
 interface NavItem {
   href: string
@@ -42,8 +37,12 @@ export function Sidebar() {
 
   // AC #11: useQuery so silo count updates reactively after create/delete invalidations
   const { data: profileData, isLoading: profileLoading } = useQuery({
-    queryKey: ['profile'],
-    queryFn: fetchProfile,
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: () => tryFetchProfile<{
+      active_silo_count: number
+      display_name: string | null
+      notification_count: number
+    }>(),
     enabled: !!session,
   })
 

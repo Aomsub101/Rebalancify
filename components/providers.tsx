@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { SessionProvider } from '@/contexts/SessionContext'
 import { UIContextProvider } from '@/contexts/UIContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 
@@ -21,9 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <SessionProvider>
-          <UIContextProvider>{children}</UIContextProvider>
-        </SessionProvider>
+        <UIContextProvider>{children}</UIContextProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

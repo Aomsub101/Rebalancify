@@ -4,123 +4,36 @@
 // (metadata cannot be exported from 'use client' components)
 
 import { useRouter } from 'next/navigation'
-import { useQuery, useQueries } from '@tanstack/react-query'
 import { PlusCircle, PieChart } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUI } from '@/contexts/UIContext'
-import { SiloCard, type SiloCardData } from '@/components/silo/SiloCard'
+import { SiloCard } from '@/components/silo/SiloCard'
 import { PortfolioSummaryCard } from '@/components/overview/PortfolioSummaryCard'
-import type { DriftAsset } from '@/lib/types/portfolio'
 import { GlobalDriftBanner } from '@/components/overview/GlobalDriftBanner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorBanner } from '@/components/shared/ErrorBanner'
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton'
-
-interface SiloResponse extends SiloCardData {
-  active_silo_count: number
-  silo_limit: number
-}
-
-interface DriftResponse {
-  silo_id: string
-  drift_threshold: number
-  computed_at: string
-  assets: DriftAsset[]
-}
-
-interface FxRateEntry {
-  rate_to_usd: string
-  fetched_at: string
-}
-
-async function fetchSilos(): Promise<SiloResponse[]> {
-  const res = await fetch('/api/silos')
-  if (!res.ok) throw new Error('Failed to fetch silos')
-  return res.json()
-}
-
-async function fetchDrift(siloId: string): Promise<DriftResponse> {
-  const res = await fetch(`/api/silos/${siloId}/drift`)
-  if (!res.ok) throw new Error(`Failed to fetch drift for silo ${siloId}`)
-  return res.json()
-}
-
-async function fetchFxRates(): Promise<Record<string, FxRateEntry>> {
-  const res = await fetch('/api/fx-rates')
-  if (!res.ok) throw new Error('Failed to fetch FX rates')
-  return res.json()
-}
+import { useOverviewData } from '@/hooks/useOverviewData'
 
 export default function OverviewPage() {
   const router = useRouter()
   const { session, profile } = useAuth()
   const { showUSD } = useUI()
 
-  // AC-3: fetch all active silos
   const {
-    data: silos,
-    isLoading: silosLoading,
-    isError: silosError,
-  } = useQuery<SiloResponse[]>({
-    queryKey: ['silos'],
-    queryFn: fetchSilos,
+    silosQuery: { data: silos, isLoading: silosLoading, isError: silosError },
+    fxRates,
+    allDriftAssets,
+    breachedAssets,
+    driftBySiloId,
+    summaryCurrency,
+  } = useOverviewData({
     enabled: !!session,
-  })
-
-  // Carry-over from STORY-018: reuse same queryKey as TopBar — zero duplicate requests
-  const { data: fxRatesData } = useQuery<Record<string, FxRateEntry>>({
-    queryKey: ['fx-rates'],
-    queryFn: fetchFxRates,
-    enabled: !!session,
-  })
-
-  // Parallel drift queries — one per silo (AC-2, AC-4)
-  const driftQueries = useQueries({
-    queries: (silos ?? []).map((silo) => ({
-      queryKey: ['drift', silo.id],
-      queryFn: () => fetchDrift(silo.id),
-      enabled: !!session && !!silos,
-    })),
-  })
-
-  // Build fxRates map: currency → rate as number
-  const fxRates: Record<string, number> = {}
-  if (fxRatesData) {
-    for (const [currency, entry] of Object.entries(fxRatesData)) {
-      fxRates[currency] = parseFloat(entry.rate_to_usd)
-    }
-  }
-
-  const profileCurrency =
-    ((profile as { global_currency?: string; base_currency?: string } | null)?.global_currency ??
+    showUSD,
+    profileCurrency:
+      (profile as { global_currency?: string; base_currency?: string } | null)?.global_currency ??
       profile?.base_currency ??
-      '')
-      .toUpperCase()
-
-  const fallbackSummaryCurrency =
-    silos?.find((silo) => fxRates[silo.base_currency] !== undefined)?.base_currency ??
-    silos?.[0]?.base_currency ??
-    'USD'
-
-  const summaryCurrency =
-    showUSD
-      ? 'USD'
-      : profileCurrency && (profileCurrency === 'USD' || fxRates[profileCurrency] !== undefined)
-        ? profileCurrency
-        : fallbackSummaryCurrency
-
-  // Aggregate all drift assets from all completed drift queries
-  const allDriftAssets: DriftAsset[] = driftQueries.flatMap((q) => q.data?.assets ?? [])
-
-  // AC-2: breached assets across all silos for GlobalDriftBanner
-  const breachedAssets = allDriftAssets.filter((a) => a.drift_breached)
-
-  // Map silo_id → drift assets for per-card DriftStatusSummary
-  const driftBySiloId: Record<string, DriftAsset[]> = {}
-  driftQueries.forEach((q) => {
-    if (q.data) {
-      driftBySiloId[q.data.silo_id] = q.data.assets
-    }
+      '',
   })
 
   return (

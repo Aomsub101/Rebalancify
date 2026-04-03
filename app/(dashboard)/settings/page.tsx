@@ -7,6 +7,12 @@ import { toast } from 'sonner'
 import { AlertCircle, CheckCircle2, Eye, EyeOff, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LLM_PROVIDERS, getDefaultModel, getModelsForProvider } from '@/lib/llmProviders'
+import {
+  PROFILE_QUERY_KEY,
+  fetchProfile,
+  patchProfile,
+  invalidateProfileQuery,
+} from '@/lib/profileClient'
 
 interface ProfileData {
   id: string
@@ -27,12 +33,6 @@ interface ProfileData {
   llm_model: string | null
 }
 
-async function fetchProfile(): Promise<ProfileData> {
-  const res = await fetch('/api/profile')
-  if (!res.ok) throw new Error('Failed to fetch profile')
-  return res.json()
-}
-
 async function fetchCorpusSize(): Promise<{ size_bytes: number }> {
   const res = await fetch('/api/knowledge/corpus-size')
   if (!res.ok) throw new Error('Failed to fetch corpus size')
@@ -51,8 +51,8 @@ export default function SettingsPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { data: profile, isLoading, error } = useQuery({
-    queryKey: ['profile'],
-    queryFn: fetchProfile,
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: () => fetchProfile<ProfileData>(),
   })
 
   // Local editable state — synced from server on load
@@ -140,17 +140,6 @@ export default function SettingsPage() {
     }
   }, [profile])
 
-  async function patchProfile(fields: Record<string, unknown>) {
-    const res = await fetch('/api/profile', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fields),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error?.message ?? 'Update failed')
-    return data
-  }
-
   async function handleSignOut() {
     window.location.assign('/api/auth/signout')
   }
@@ -161,7 +150,7 @@ export default function SettingsPage() {
     onSuccess?: () => void,
   ) {
     await patchProfile(fields)
-    await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    await invalidateProfileQuery(queryClient)
     onSuccess?.()
     toast.success(successMessage)
   }
@@ -202,7 +191,7 @@ export default function SettingsPage() {
       if (alpacaKey.trim()) fields.alpaca_key = alpacaKey.trim()
       if (alpacaSecret.trim()) fields.alpaca_secret = alpacaSecret.trim()
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       // Clear plaintext inputs after save — CLAUDE.md Rule 16
       setAlpacaKey('')
       setAlpacaSecret('')
@@ -226,7 +215,7 @@ export default function SettingsPage() {
       if (invxEquitySecret.trim()) fields.innovestx_secret = invxEquitySecret.trim()
       if (Object.keys(fields).length === 0) return
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       setInvxEquityKey('')
       setInvxEquitySecret('')
       setShowInvxEquityKey(false)
@@ -249,7 +238,7 @@ export default function SettingsPage() {
       if (invxDigitalSecret.trim()) fields.innovestx_digital_secret = invxDigitalSecret.trim()
       if (Object.keys(fields).length === 0) return
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       setInvxDigitalKey('')
       setInvxDigitalSecret('')
       setShowInvxDigitalKey(false)
@@ -272,7 +261,7 @@ export default function SettingsPage() {
       if (bitkubSecret.trim()) fields.bitkub_secret = bitkubSecret.trim()
       if (Object.keys(fields).length === 0) return
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       setBitkubKey('')
       setBitkubSecret('')
       setShowBitkubKey(false)
@@ -295,7 +284,7 @@ export default function SettingsPage() {
       if (webullSecret.trim()) fields.webull_secret = webullSecret.trim()
       if (Object.keys(fields).length === 0) return
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       setWebullKey('')
       setWebullSecret('')
       setShowWebullKey(false)
@@ -342,7 +331,7 @@ export default function SettingsPage() {
       }
       if (llmKey.trim()) fields.llm_key = llmKey.trim()
       await patchProfile(fields)
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+      await invalidateProfileQuery(queryClient)
       setLlmKey('')
       setShowLlmKey(false)
       setLlmSaved(true)

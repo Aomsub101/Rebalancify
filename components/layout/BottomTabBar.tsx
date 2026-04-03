@@ -8,7 +8,7 @@ import {
   Compass,
   Settings2,
 } from 'lucide-react'
-import { useSession } from '@/contexts/SessionContext'
+import { useSiloCount } from '@/contexts/UIContext'
 import { useDirtyState } from '@/contexts/DirtyStateContext'
 import { cn } from '@/lib/utils'
 
@@ -29,7 +29,7 @@ const TAB_ITEMS: TabItem[] = [
 export function BottomTabBar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { siloCount } = useSession()
+  const siloCount = useSiloCount()
   const { isDirty, confirmNavigation } = useDirtyState()
 
   function handleTabClick(href: string) {
